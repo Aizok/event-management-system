@@ -1,8 +1,8 @@
 from fastapi import FastAPI
-from app.api.v1.endpoints import auth
-from app.core.config import settings
-from app.core.database import engine
-from app.models.user import Base
+from .api.v1.endpoints import auth
+from .core.config import settings
+from .core.database import engine
+from .models.user import Base
 
 
 app=FastAPI(
@@ -22,5 +22,5 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "auth-service",
-        "database_urk": settings.DATABASE_URL
+        "database_url": settings.DATABASE_URL
     }
