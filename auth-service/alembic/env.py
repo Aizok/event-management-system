@@ -11,9 +11,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # 2. Импортируем ваши настройки и модели
-from app.core.config import settings
-from app.models.user import Base
-
+from ..app.core.config import settings
+from ..app.models.user import Base
+from ..app.models import user # noqa: F401
 # Alembic Config object
 config = context.config
 

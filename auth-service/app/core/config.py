@@ -2,14 +2,12 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql://auth_user:auth_password@postgres_auth:5432/auth_db"
+    DATABASE_URL: str
 
-    # JWT
-    SECRET_KEY: str = "password_password_password_password_1111"
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
 
-    #App
     DEBUG: bool=True
     PROJECT_NAME: str="Auth Service"
     VERSION: str = "1.0.0"

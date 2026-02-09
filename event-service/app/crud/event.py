@@ -1,19 +1,19 @@
-from Demos.EvtSubscribe_pull import query_text
 from sqlalchemy.orm import Session
+from typing import List, Optional
 from ..models.event import Event
 from ..schemas.event import EventCreate, EventUpdate
 
 class EventCRUD:
-    def get(self, db: Session, event_id: int):
+    def get(self, db: Session, event_id: int) -> Optional[Event]:
         return db.query(Event).filter(Event.id==event_id).first()
 
-    def get_multi(self, db: Session, skip: int=0, limit: int=100, owner_id: int = None):
+    def get_multi(self, db: Session, skip: int=0, limit: int=100, owner_id: int = None) -> List[Event]:
         query=db.query(Event)
         if owner_id:
             query=query.filter(Event.owner_id == owner_id)
         return query.offset(skip).limit(limit).all()
 
-    def create(self, db: Session, obj_in: EventCreate, owner_id: int):
+    def create(self, db: Session, obj_in: EventCreate, owner_id: int) -> Event:
         db_obj=Event(
             **obj_in.model_dump(),
             owner_id=owner_id

@@ -2,9 +2,9 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 
 class Settings(BaseSettings):
-    DATABASE_URL: str="postgresql://event_user:event_passsword@postgres_events:5432/events_db"
+    DATABASE_URL: str
 
-    SECRET_KEY: str="password_password_password_password1111"
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
 
     PROJECT_NAME: str="Event Service"
