@@ -1,68 +1,40 @@
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 from alembic import context
 import sys
 from pathlib import Path
 
-# ------------------------------------------------------------------------
-# 1. Добавляем путь к корню проекта, чтобы видеть пакет 'app'
-# ------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# 2. Импортируем ваши настройки и модели
-from ..app.core.config import settings
-from ..app.models.user import Base
-from ..app.models import user # noqa: F401
-# Alembic Config object
+from app.core.config import settings
+from app.models.user import Base
+
 config = context.config
 
-# ------------------------------------------------------------------------
-# 3. Настройка логирования
-# ------------------------------------------------------------------------
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# 4. Метаданные моделей для автогенерации (чтобы видеть изменения в таблицах)
 target_metadata = Base.metadata
 
 
-def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode."""
-    # Используем URL прямо из настроек
+def run_migrations_offline():
     url = settings.DATABASE_URL
-    context.configure(
-        url=url,
-        target_metadata=target_metadata,
-        literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
-    )
-
+    context.configure(url=url, target_metadata=target_metadata, literal_binds=True)
     with context.begin_transaction():
         context.run_migrations()
 
 
-def run_migrations_online() -> None:
-    """Run migrations in 'online' mode."""
-
-    # --------------------------------------------------------------------
-    # ВАЖНО: Берем конфиг из .ini и ВРУЧНУЮ добавляем туда URL базы
-    # --------------------------------------------------------------------
+def run_migrations_online():
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = settings.DATABASE_URL
+    configuration["sqlalchemy.url"] = settings.DATABASE_URL  # ← КЛЮЧЕВАЯ СТРОКА!
 
     connectable = engine_from_config(
         configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
-
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata
-        )
-
+        context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()
 
