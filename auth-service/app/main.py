@@ -4,6 +4,7 @@ from .core.config import settings
 from .core.database import engine
 from .models.user import Base
 
+Base.metadata.create_all(bind=engine)
 
 app=FastAPI(
     title="Auth Service - Event Management System",

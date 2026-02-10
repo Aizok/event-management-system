@@ -20,7 +20,7 @@ class Event(Base):
 
     id:Mapped[int]=mapped_column(primary_key=True, index=True)
     title:Mapped[str]=mapped_column(String(255), nullable=False)
-    description:Mapped[str |None]=mapped_column(Text, nullable=False)
+    description:Mapped[str | None]=mapped_column(Text, nullable=True)
 
     start_date: Mapped[datetime]=mapped_column(DateTime(timezone=True), nullable=False)
     end_date: Mapped[datetime]=mapped_column(DateTime(timezone=True), nullable=False)
@@ -32,4 +32,4 @@ class Event(Base):
     owner_id:Mapped[int]=mapped_column(nullable=False)
 
     created_at=mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at=mapped_column(DateTime(timezone=True), onupdate=func.now())
+    updated_at=mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

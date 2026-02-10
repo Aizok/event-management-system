@@ -13,10 +13,11 @@ def get_current_user_id(token: str=Depends(oauth2_scheme)) -> int:
     )
     try:
         payload=jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id: int=payload.get("sub")
+        user_id: str = payload.get("sub")
 
         if user_id is None:
             raise credentials_exception
-        return user_id
+
+        return int(user_id)
     except JWTError:
-        return credentials_exception
+        raise credentials_exception
