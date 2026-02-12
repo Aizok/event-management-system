@@ -3,8 +3,14 @@ from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator
 from .config import settings
 
-engine=create_engine(
-    settings.DATABASE_URL
+SQLALCHEMY_DATABASE_URL = settings.DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://")
+
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args={
+        "client_encoding": "UTF8"
+    },
+    pool_pre_ping=True
 )
 
 SessionLocal=sessionmaker(autocommit=False, autoflush=False, bind=engine)

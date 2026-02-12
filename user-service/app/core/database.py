@@ -4,8 +4,10 @@ from typing import Generator
 from .config import settings
 from ..models.user import Base
 
+SQLALCHEMY_DATABASE_URL = settings.DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://")
+
 engine=create_engine(
-    settings.DATABASE_URL,
+    SQLALCHEMY_DATABASE_URL,
     pool_pre_ping=True,
     echo=settings.DEBUG
 )
