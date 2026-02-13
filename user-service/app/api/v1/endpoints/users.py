@@ -64,3 +64,17 @@ async def delete_user_profile(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User profile not found"
         )
+
+
+@router.get("/me", response_model=UserResponse)
+async def read_own_profile(
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
+    profile = user_crud.get(db, current_user_id)  # Поиск своего профиля
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User profile not found"
+        )
+    return profile

@@ -20,7 +20,7 @@ class UserProfile(Base):
 
     first_name:Mapped[str]=mapped_column(String(100), nullable=False)
     last_name:Mapped[str]=mapped_column(String(100), nullable=False)
-    phone: Mapped[Optional[str]]=mapped_column(String(20))
+    phone: Mapped[Optional[str]]=mapped_column(String(20), unique=True, nullable=True, index=True)
     speciality: Mapped[Optional[str]]=mapped_column(String(100))
     bio: Mapped[Optional[str]]=mapped_column(String(255))
 

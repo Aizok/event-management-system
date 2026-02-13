@@ -22,8 +22,9 @@ class UserResponse(BaseModel):
     auth_user_id: int
     first_name: str
     last_name: str
-    phone: str
-    speciality: str
+    phone: Optional[str] = None
+    speciality: Optional[str] = None
+    bio: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime]
 
