@@ -146,6 +146,22 @@ services:
       - app-network
     restart: unless-stopped
 
+  nginx:
+    image: nginx:alpine
+    container_name: api-gateway
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/gateway.conf:/etc/nginx/conf.d/gateway.conf:ro
+      - /dev/null:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - auth-service
+      - user-service
+      - event-service
+    restart: unless-stopped
+    networks:
+      - app-network
 
 volumes:
   postgres_auth_data:
@@ -153,6 +169,7 @@ volumes:
   postgres_users_data:
   redis_data:
   rabbitmq_data:
+
 
 networks:
   app-network:
