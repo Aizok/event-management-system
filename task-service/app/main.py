@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .api.v1.endpoints.tasks import router as tasks_router
 from .core.config import settings
 from .core.database import engine
-from .models.task import Base
+from .models.base import Base
 
 Base.metadata.create_all(bind=engine)
 
@@ -20,9 +20,9 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-app.include_router(tasks_router, prefix="/api/v1/events", tags=["events"])
+app.include_router(tasks_router, prefix="/api/v1/tasks", tags=["tasks"])
 
-@app.get("/")
+@app.get("/health")
 async def health_check():
     return {
         "status": "healthy",

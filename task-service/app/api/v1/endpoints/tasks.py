@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from ....core.database import get_db
-from ....core.security import get_current_user_id
 from ....crud.task import task_crud
 from ....schemas.task import TaskCreate, TaskUpdate, TaskResponse
 
@@ -23,9 +22,13 @@ def read_task(task_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     return Task
 
+@router.get("/event/{event_id}", response_model=List[TaskResponse])
+def read_tasks_by_event(event_id: int, db: Session=Depends(get_db)):
+    return task_crud.get_by_event(db, event_id)
+
 @router.put("/{task_id}", response_model=TaskResponse)
-def update_task(task_id: int, task_in: TaskUpdate, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
-    return task_crud.update(db=db, task_id=task_id, obj_in=task_in, owner_id=user_id)
+def update_task(task_id: int, task_in: TaskUpdate, db: Session = Depends(get_db)):
+    return task_crud.update(db=db, task_id=task_id, obj_in=task_in)
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)  
 def delete_task(task_id: int, db: Session = Depends(get_db)):
