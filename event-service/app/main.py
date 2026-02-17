@@ -22,7 +22,7 @@ app.add_middleware(
 
 app.include_router(events_router, prefix="/api/v1/events", tags=["events"])
 
-@app.get("/")
+@app.get("/health")
 async def health_check():
     return {
         "status": "healthy",

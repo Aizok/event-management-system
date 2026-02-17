@@ -124,6 +124,12 @@ services:
       - ./auth-service:/app
       - /app/__pycache__
     restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 60s
     networks:
       - app-network
 
@@ -141,6 +147,12 @@ services:
     volumes:
       - ./event-service:/app
       - /app/__pycache__
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8002/health" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
     networks:
       - app-network
@@ -159,6 +171,12 @@ services:
     volumes:
       - ./user-service:/app
       - /app/__pycache__
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8003/health" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
     networks:
       - app-network
@@ -177,6 +195,12 @@ services:
     volumes:
       - ./task-service:/app
       - /app/__pycache__
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
     networks:
       - app-network

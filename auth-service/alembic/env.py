@@ -7,7 +7,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core.config import settings
-from app.models.user import Base
+from app.models.base import Base
+from app.models import user # noqa: F401
 
 config = context.config
 
