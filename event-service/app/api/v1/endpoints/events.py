@@ -27,7 +27,7 @@ def read_event(event_id: int, db: Session = Depends(get_db), user_id: int = Depe
 def update_event(event_id: int, event_in: EventUpdate, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
     return event_crud.update(db=db, event_id=event_id, obj_in=event_in, owner_id=user_id)
 
-@router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)  # ✅ Для DELETE
+@router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_event(event_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
     success = event_crud.delete(db, event_id)
     if not success:
