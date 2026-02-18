@@ -5,14 +5,12 @@ from .config import settings
 from pydantic import BaseModel
 from typing import Optional
 # from ..models.user import UserProfile
+from ..schemas.user import TokenData
 
 # oauth2_scheme=OAuth2PasswordBearer(tokenUrl="http://localhost:8001/api/v1/auth/login")
 oauth2_scheme=OAuth2PasswordBearer(tokenUrl="auth/login")
 
-class TokenData(BaseModel):  # Локальная версия!
-    user_id: int
-    email: Optional[str] = None
-    role: Optional[str] = None
+
 
 def get_current_user_id(token: str=Depends(oauth2_scheme)) -> int:
     credentials_exception=HTTPException(

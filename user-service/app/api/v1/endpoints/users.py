@@ -13,7 +13,10 @@ router=APIRouter()
 
 
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def create_user_profile(user_in: UserCreate, db: Session=Depends(get_db), user_id: int=Depends(get_current_user_id)):
+async def create_user_profile(
+        user_in: UserCreate,
+        db: Session=Depends(get_db),
+        user_id: int=Depends(get_current_user_id)):
     return user_crud.create(db=db, obj_in=user_in, owner_id=user_id)
 
 
@@ -23,8 +26,22 @@ async def read_user_profiles(
         limit: int=100,
         db: Session=Depends(get_db),
         current_user_id: int=Depends(get_current_user_id)):
-    users=user_crud.get_multi(db, skip-skip, limit=limit)
+    users=user_crud.get_multi(db, skip=skip, limit=limit)
     return users
+
+
+@router.get("/me", response_model=UserResponse)
+async def read_own_profile(
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
+    profile = user_crud.get(db, current_user_id)
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User profile not found"
+        )
+    return profile
 
 
 @router.get("/{user_id}", response_model=UserResponse)
@@ -64,17 +81,3 @@ async def delete_user_profile(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User profile not found"
         )
-
-
-@router.get("/me", response_model=UserResponse)
-async def read_own_profile(
-    db: Session = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id)
-):
-    profile = user_crud.get(db, current_user_id)  # Поиск своего профиля
-    if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User profile not found"
-        )
-    return profile

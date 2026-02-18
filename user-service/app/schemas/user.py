@@ -29,3 +29,9 @@ class UserResponse(BaseModel):
     updated_at: Optional[datetime]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TokenData(BaseModel):
+    user_id: int
+    email: Optional[str] = None
+    role: Optional[str] = None
