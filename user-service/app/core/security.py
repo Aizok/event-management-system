@@ -11,7 +11,6 @@ from ..schemas.user import TokenData
 oauth2_scheme=OAuth2PasswordBearer(tokenUrl="auth/login")
 
 
-
 def get_current_user_id(token: str=Depends(oauth2_scheme)) -> int:
     credentials_exception=HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -28,6 +27,7 @@ def get_current_user_id(token: str=Depends(oauth2_scheme)) -> int:
     except JWTError:
         raise credentials_exception
 
+# Пока не используется
 def get_current_user_data(token: str=Depends(oauth2_scheme)) -> TokenData:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

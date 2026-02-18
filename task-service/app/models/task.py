@@ -35,6 +35,7 @@ class Task(Base):
     updated_at:Mapped[DateTime]=mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     event_id: Mapped[int]=mapped_column(Integer, nullable=True, index=True)
+    owner_id: Mapped[int]=mapped_column(Integer, nullable=False, index=True)
     assignee_id: Mapped[int | None]=mapped_column(Integer, nullable=True, index=True)
 
     # event_id: Mapped[int | None]=mapped_column(ForeignKey("events.id"), nullable=True)

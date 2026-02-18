@@ -36,3 +36,9 @@ class TaskResponse(BaseModel):
     assignee_id: Optional[int]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TokenData(BaseModel):
+    user_id: int
+    email: Optional[str] = None
+    role: Optional[str] = None
