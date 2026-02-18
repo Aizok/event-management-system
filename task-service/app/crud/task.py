@@ -29,7 +29,7 @@ class TaskCRUD:
             query=query.filter(Task.owner_id==owner_id)
         return query.all()
 
-    def update(self, db: Session, task_id: int, obj_in: TaskUpdate) -> Task:
+    def update(self, db: Session, task_id: int, obj_in: TaskUpdate, owner_id: int) -> Task:
         db_obj=self.get(db, task_id)
         if not db_obj:
             raise ValueError("Task not found")

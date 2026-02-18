@@ -37,9 +37,3 @@ class Task(Base):
     event_id: Mapped[int]=mapped_column(Integer, nullable=True, index=True)
     owner_id: Mapped[int]=mapped_column(Integer, nullable=False, index=True)
     assignee_id: Mapped[int | None]=mapped_column(Integer, nullable=True, index=True)
-
-    # event_id: Mapped[int | None]=mapped_column(ForeignKey("events.id"), nullable=True)
-    # assignee_id: Mapped[int | None]=mapped_column(ForeignKey("users.id"), nullable=True)
-
-    # event=relationship("Event", back_populates="tasks")
-    # assignee = relationship("User", back_populates="tasks")
