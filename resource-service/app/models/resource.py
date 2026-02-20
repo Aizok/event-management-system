@@ -50,7 +50,7 @@ class ResourceAllocation(Base):
         "Resource",
         back_populates="allocations"
     )
-    resource_id: Mapped[int]=mapped_column(ForeignKey("resource.id"))
+    resource_id: Mapped[int]=mapped_column(ForeignKey("resources.id"))
 
     task_id: Mapped[int]=mapped_column(Integer, nullable=True, index=True)
     event_id: Mapped[int]=mapped_column(Integer, nullable=True, index=True)

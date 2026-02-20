@@ -1,7 +1,8 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from ..models.resource import ResourceStatus, ResourceType
+
 
 class ResourceBase(BaseModel):
     name: str=Field(..., min_length=1, max_length=255)
@@ -28,6 +29,7 @@ class ResourceResponse(ResourceBase):
     owner_id: int
     created_at: datetime
     updated_at: Optional[datetime]
+    allocations: List["ResourceAllocationResponse"]=[]
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -39,6 +41,15 @@ class ResourceAllocationCreate(BaseModel):
     quantity_used: int=1
     date_start: datetime
     date_end: datetime
+
+
+class ResourceAllocationUpdate(BaseModel):
+    resource_id: Optional[int]=None
+    task_id: Optional[int]=None
+    event_id: Optional[int]=None
+    quantity_used: Optional[int]=Field(None, ge=1, le=1000)
+    date_start: Optional[datetime]=None
+    date_end: Optional[datetime]=None
 
 
 class ResourceAllocationResponse(BaseModel):

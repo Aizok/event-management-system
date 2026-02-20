@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .api.v1.endpoints.tasks import router as tasks_router
+from .api.v1.endpoints.resources import router as resources_router
 from .core.config import settings
 from .core.database import engine
 from .models.base import Base
@@ -20,11 +20,11 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-app.include_router(tasks_router, prefix="/api/v1/tasks", tags=["tasks"])
+app.include_router(resources_router, prefix="/api/v1/resources", tags=["resources"])
 
 @app.get("/health")
 async def health_check():
     return {
         "status": "healthy",
-        "service": "task-service"
+        "service": "resource-service"
     }
