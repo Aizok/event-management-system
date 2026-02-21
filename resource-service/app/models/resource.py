@@ -54,6 +54,7 @@ class ResourceAllocation(Base):
 
     task_id: Mapped[int]=mapped_column(Integer, nullable=True, index=True)
     event_id: Mapped[int]=mapped_column(Integer, nullable=True, index=True)
+    owner_id: Mapped[int]=mapped_column(Integer, nullable=False, index=True)
 
     quantity_used: Mapped[int]=mapped_column(Integer, default=1)
     status: Mapped[ResourceStatus]=mapped_column(SAEnum(ResourceStatus), default=ResourceStatus.AVAILABLE)

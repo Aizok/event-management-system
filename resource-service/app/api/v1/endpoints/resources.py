@@ -12,6 +12,7 @@ from ....schemas.resource import (
 
 router = APIRouter()
 
+
 @router.post("/", response_model=ResourceResponse, status_code=status.HTTP_201_CREATED)
 def create_resource(
         resource_in: ResourceCreate,
@@ -20,6 +21,7 @@ def create_resource(
 ):
     return resource_crud.create_resource(db=db, obj_in=resource_in, owner_id=user_id)
 
+
 @router.get("/", response_model=List[ResourceResponse])
 def read_resources(
         skip: int = 0,
@@ -27,7 +29,8 @@ def read_resources(
         db: Session = Depends(get_db),
         user_id: int= Depends(get_current_user_id)
 ):
-    return resource_crud.get_multi(db, skip=skip, limit=limit, owner_id=user_id)
+    return resource_crud.get_multi_resources(db, skip=skip, limit=limit, owner_id=user_id)
+
 
 @router.get("/{resource_id}", response_model=ResourceResponse)
 def read_resource(
@@ -49,8 +52,6 @@ def update_resource(
         user_id: int= Depends(get_current_user_id)
 ):
     resource=resource_crud.update_resource(db, resource_id, resource_in, user_id)
-    if not resource:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found or access denied")
     return resource
 
 
@@ -60,20 +61,60 @@ def delete_resource(
         resource_id: int,
         db: Session = Depends(get_db),
         user_id: int= Depends(get_current_user_id)):
-    success = resource_crud.delete(db, resource_id, user_id)
+    success = resource_crud.delete_resource(db, resource_id, user_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found or access denied")
 
 
 """Allocations"""
 
-@router.get("/allocations", status_code=status.HTTP_201_CREATED)
-def create_resource_allocation(
-        resource_allocation_in: ResourceAllocationCreate,
+@router.post("/allocations/", response_model=ResourceAllocationResponse, status_code=status.HTTP_201_CREATED)
+def create_allocation(
+        allocation_in: ResourceAllocationCreate,
         db: Session=Depends(get_db),
         user_id: int=Depends(get_current_user_id)
 ):
-    return resource_crud.create_allocation(db=db, obj_in=resource_allocation_in)
+    return resource_crud.create_allocation(db=db, obj_in=allocation_in, owner_id=user_id)
 
 
+@router.get("/allocations/", response_model=List[ResourceAllocationResponse])
+def read_allocations(
+        skip: int = 0,
+        limit: int = 100,
+        db: Session = Depends(get_db),
+        user_id: int = Depends(get_current_user_id)
+):
+    return resource_crud.get_multi_allocations(db, skip=skip, limit=limit, owner_id=user_id)
 
+
+@router.get("/allocations/{allocation_id}", response_model=ResourceAllocationResponse)
+def read_allocation(
+        allocation_id: int,
+        db: Session=Depends(get_db),
+        user_id: int = Depends(get_current_user_id)
+):
+    allocation=resource_crud.get_allocation(db, allocation_id, user_id)
+    if not allocation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Allocation not found")
+    return allocation
+
+
+@router.put("/allocations/{allocation_id}", response_model=ResourceAllocationResponse)
+def update_allocation(
+        allocation_id: int,
+        allocation_in: ResourceAllocationUpdate,
+        db: Session = Depends(get_db),
+        user_id: int = Depends(get_current_user_id)
+):
+    allocation=resource_crud.update_allocation(db, allocation_id, allocation_in, user_id)
+    return allocation
+
+
+@router.delete("/allocations/{allocation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_allocation(
+        allocation_id: int,
+        db: Session = Depends(get_db),
+        user_id: int= Depends(get_current_user_id)):
+    success = resource_crud.delete_allocation(db, allocation_id, user_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource allocation not found or access denied")

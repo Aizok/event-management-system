@@ -57,6 +57,7 @@ class ResourceAllocationResponse(BaseModel):
     resource_id: int
     task_id: Optional[int]
     event_id: Optional[int]
+    owner_id: Optional[int]
     quantity_used: int
     status: ResourceStatus
     date_start: datetime
