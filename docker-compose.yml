@@ -231,7 +231,7 @@ services:
       - DATABASE_URL=postgresql://resource_user:resource_password@postgres_resources:5432/resources_db
       - SECRET_KEY=${SECRET_KEY}
     depends_on:
-      postgres_tasks:
+      postgres_resources:
         condition: service_healthy
     volumes:
       - ./resource-service:/app
