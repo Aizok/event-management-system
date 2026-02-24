@@ -14,7 +14,7 @@ class TaskCRUD:
         db.refresh(db_obj)
         return db_obj
 
-    def get(self, db: Session, task_id: int) -> Optional[Task]:
+    def get(self, db: Session, task_id: int, owner_id: Optional[int]=None) -> Optional[Task]:
         return db.query(Task).filter(Task.id==task_id).first()
 
     def get_multi(self, db: Session, skip: int=0, limit: int=100, owner_id: int = None) -> List[Task]:

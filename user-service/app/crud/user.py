@@ -13,10 +13,10 @@ class UserCRUD:
         db.refresh(db_obj)
         return db_obj
 
-    def get(self, db: Session, user_id: int) -> Optional[UserProfile]:
+    def get(self, db: Session, user_id: int, owner_id: Optional[int]=None) -> Optional[UserProfile]:
         return db.query(UserProfile).filter(UserProfile.id == user_id).first()
 
-    def get_multi(self, db: Session, skip: int = 0, limit: int = 100) -> List[UserProfile]:
+    def get_multi(self, db: Session, skip: int = 0, limit: int = 100, owner_id: Optional[int]=None) -> List[UserProfile]:
         return db.query(UserProfile).offset(skip).limit(limit).all()
 
     def update(self, db: Session, user_id: int, obj_in: UserUpdate) -> Optional[UserProfile]:
@@ -33,10 +33,10 @@ class UserCRUD:
         return db_obj
 
 
-    def delete(self, db: Session, user_id: int) -> bool:
-        db_obj=self.get(db, user_id)
-        if db_obj:
-            db.delete(db_obj)
+    def delete(self, db: Session, user_id: int, owner_id: Optional[int]=None) -> bool:
+        obj=self.get(db, user_id)
+        if obj and obj.auth_user_id==owner_id:
+            db.delete(obj)
             db.commit()
             return True
         return False

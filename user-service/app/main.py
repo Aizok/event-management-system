@@ -1,30 +1,21 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from .api.v1.endpoints import users
 from .core.config import settings
-from .core.database import engine
-from .models.user import Base
 
-Base.metadata.create_all(bind=engine)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print(f"{settings.PROJECT_NAME} starting")
+    yield
+    print("Service stopped")
+
 
 app=FastAPI(
     title="User Service - Event Management System",
     version="1.0.0",
-    description="User microservice"
-)
-
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:8001",
-        "http://localhost:8002",
-        "http://localhost:8003"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
+    description="User microservice",
+    lifespan=lifespan
 )
 
 

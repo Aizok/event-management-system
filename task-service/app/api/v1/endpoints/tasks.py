@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession 
 from typing import List
 
 from ....core.database import get_db
@@ -11,54 +11,60 @@ from ....schemas.task import TaskCreate, TaskUpdate, TaskResponse
 router = APIRouter()
 
 @router.post("/", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
-def create_task(
+async def create_task(
         task_in: TaskCreate,
-        db: Session = Depends(get_db),
-        user_id: int= Depends(get_current_user_id)
+        db: AsyncSession = Depends(get_db),
+        user_id: int = Depends(get_current_user_id)
 ):
-    return task_crud.create(db=db, obj_in=task_in, owner_id=user_id)
+    task=await task_crud.create(db=db, obj_in=task_in, owner_id=user_id)
+    return task
 
 @router.get("/", response_model=List[TaskResponse])
-def read_tasks(
+async def read_tasks(
         skip: int = 0,
         limit: int = 100,
-        db: Session = Depends(get_db),
-        user_id: int= Depends(get_current_user_id)
+        db: AsyncSession = Depends(get_db),
+        user_id: int = Depends(get_current_user_id)
 ):
-    return task_crud.get_multi(db, skip=skip, limit=limit, owner_id=user_id)
+    tasks=await task_crud.get_multi(db, skip=skip, limit=limit, owner_id=user_id)
+    return tasks
 
 @router.get("/{task_id}", response_model=TaskResponse)
-def read_task(
+async def read_task(
         task_id: int,
-        db: Session = Depends(get_db),
-        user_id: int= Depends(get_current_user_id)
+        db: AsyncSession = Depends(get_db),
+        user_id: int = Depends(get_current_user_id)
 ):
-    task = task_crud.get(db, task_id)
+    task = await task_crud.get(db, task_id, user_id)
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     return task
 
 @router.get("/event/{event_id}", response_model=List[TaskResponse])
-def read_tasks_by_event(
+async def read_tasks_by_event(
         event_id: int,
-        db: Session=Depends(get_db),
-        user_id: int= Depends(get_current_user_id)
+        db: AsyncSession=Depends(get_db),
+        user_id: int = Depends(get_current_user_id)
 ):
-    return task_crud.get_by_event(db, event_id, user_id)
+    task_by_event=await task_crud.get_by_event(db, event_id, user_id)
+    return task_by_event
 
 
 @router.put("/{task_id}", response_model=TaskResponse)
-def update_task(
+async def update_task(
         task_id: int,
         task_in: TaskUpdate,
-        db: Session = Depends(get_db),
-        user_id: int= Depends(get_current_user_id)
+        db: AsyncSession = Depends(get_db),
+        user_id: int = Depends(get_current_user_id)
 ):
-    return task_crud.update(db=db, task_id=task_id, obj_in=task_in, owner_id=user_id)
+    task=await task_crud.update(db=db, task_id=task_id, obj_in=task_in, owner_id=user_id)
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    return task
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)  
-def delete_task(task_id: int, db: Session = Depends(get_db), user_id: int= Depends(get_current_user_id)):
-    success = task_crud.delete(db, task_id)
+async def delete_task(task_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    success = await task_crud.delete(db, task_id, user_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")

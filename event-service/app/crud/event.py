@@ -1,19 +1,24 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import select, func, update, delete
 from typing import List, Optional
 from ..models.event import Event
 from ..schemas.event import EventCreate, EventUpdate
 
 class EventCRUD:
-    def get(self, db: Session, event_id: int) -> Optional[Event]:
-        return db.query(Event).filter(Event.id==event_id).first()
+    async def get(self, db: Session, event_id: int, owner_id: Optional[int]=None) -> Optional[Event]:
+        query=select(Event).where(Event.id ==event_id)
+        if owner_id:
+            query=query.where(Event.owner_id==owner_id)
+        result=db.execute(query)
+        return result.scalar_one_or_none()
 
-    def get_multi(self, db: Session, skip: int=0, limit: int=100, owner_id: int = None) -> List[Event]:
+    async def get_multi(self, db: Session, skip: int=0, limit: int=100, owner_id: int = None) -> List[Event]:
         query=db.query(Event)
         if owner_id:
             query=query.filter(Event.owner_id == owner_id)
         return query.offset(skip).limit(limit).all()
 
-    def create(self, db: Session, obj_in: EventCreate, owner_id: int) -> Event:
+    async def create(self, db: Session, obj_in: EventCreate, owner_id: int) -> Event:
         db_obj=Event(
             **obj_in.model_dump(),
             owner_id=owner_id
@@ -23,8 +28,8 @@ class EventCRUD:
         db.refresh(db_obj)
         return db_obj
 
-    def update(self, db: Session, event_id: int, obj_in: EventUpdate, owner_id: int) -> Event:
-        db_obj=self.get(db, event_id)
+    async def update(self, db: Session, event_id: int, obj_in: EventUpdate, owner_id: int) -> Event:
+        db_obj=await self.get(db, event_id)
         if not db_obj:
             raise ValueError("Event not found")
         if db_obj.owner_id != owner_id:
@@ -34,14 +39,14 @@ class EventCRUD:
         for field, value in update_data.items():
             setattr(db_obj, field, value)
 
-        db.commit()
-        db.refresh(db_obj)
+        await db.commit()
+        await db.refresh(db_obj)
         return db_obj
 
 
-    def delete(self, db: Session, event_id: int) -> bool:
+    async def delete(self, db: Session, event_id: int, owner_id: Optional[int]=None) -> bool:
         obj=self.get(db, event_id)
-        if obj:
+        if obj and obj.owner_id == owner_id:
             db.delete(obj)
             db.commit()
             return True
