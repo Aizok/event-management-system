@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession 
 from datetime import timedelta
 from typing import List
+
 
 from ....core.database import get_db
 from ....core.security import verify_password, create_access_token
@@ -15,20 +16,20 @@ router=APIRouter()
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(user_in: UserCreate, db: Session=Depends(get_db)):
-    existing_user=user_crud.get_by_email(db, user_in.email)
+async def register(user_in: UserCreate, db: AsyncSession=Depends(get_db)):
+    existing_user=await user_crud.get_by_email(db, user_in.email)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Пользователь с email {user_in.email} уже существует"
         )
-    user=user_crud.create(db, user_in)
+    user=await user_crud.create(db, user_in)
     return user
 
 
 @router.post("/login", response_model=Token)
-async def login(user_in: UserLogin, db: Session=Depends(get_db)):
-    user=user_crud.get_by_email(db, user_in.email)
+async def login(user_in: UserLogin, db: AsyncSession=Depends(get_db)):
+    user=await user_crud.get_by_email(db, user_in.email)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -48,7 +49,6 @@ async def login(user_in: UserLogin, db: Session=Depends(get_db)):
             detail=f"Аккаунт {user.status.value}. Обратитесь к администратору"
         )
 
-
     access_token_expires=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token=create_access_token(
         data={
@@ -60,7 +60,7 @@ async def login(user_in: UserLogin, db: Session=Depends(get_db)):
     )
 
     # Обновить last_login
-    user_crud.update_last_login(db, user.id)
+    await user_crud.update_last_login(db, user.id)
 
     return {
         "access_token": access_token,
@@ -69,13 +69,13 @@ async def login(user_in: UserLogin, db: Session=Depends(get_db)):
     }
 
 @router.get("/users", response_model=List[UserResponse])
-async def get_users(skip: int=0, limit: int=100, db: Session=Depends(get_db)):
-    users=user_crud.get_all(db, skip-skip, limit=limit)
+async def get_users(skip: int=0, limit: int=100, db: AsyncSession=Depends(get_db)):
+    users=await user_crud.get_all(db, skip-skip, limit=limit)
     return users
 
 @router.get("/users/{user_id}", response_model=UserResponse)
-async def get_user(user_id: int, db: Session=Depends(get_db)):
-    user=user_crud.get_by_id(db, user_id)
+async def get_user(user_id: int, db: AsyncSession=Depends(get_db)):
+    user=await user_crud.get_by_id(db, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

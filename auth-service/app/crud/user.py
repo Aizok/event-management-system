@@ -1,5 +1,6 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import select, func, update, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from typing import Optional, List
 from datetime import datetime
 from ..models.user import User, UserStatus
@@ -8,16 +9,25 @@ from ..core.security import get_password_hash
 
 
 class UserCRUD:
-    def get_by_id(self, db: Session, user_id: int) -> Optional[User]:
-        return db.query(User).filter(User.id == user_id).first()
+    async def get_by_id(self, db: AsyncSession, user_id: int) -> Optional[User]:
+        result=await db.execute(
+            select(User).where(User.id==user_id)
+        )
+        return result.scalar_one_or_none()
 
-    def get_by_email(self, db: Session, email: str) -> Optional[User]:
-        return db.query(User).filter(func.lower(User.email) == func.lower(email)).first()
+    async def get_by_email(self, db: AsyncSession, email: str) -> Optional[User]:
+        result=await db.execute(
+            select(User).where(func.lower(User.email) == func.lower(email))
+        )
+        return result.scalar_one_or_none()
 
-    def get_all(self, db: Session, skip: int = 0, limit: int = 100) -> List[User]:
-        return db.query(User).offset(skip).limit(limit).all()
+    async def get_all(self, db: AsyncSession, skip: int = 0, limit: int = 100) -> List[User]:
+        result=await db.execute(
+            select(User).offset(skip).limit(limit)
+        )
+        return result.scalars().all()
 
-    def create(self, db: Session, user_in: UserCreate) -> User:
+    async def create(self, db: AsyncSession, user_in: UserCreate) -> User:
         db_user=User(
             email=user_in.email.lower(),
             hashed_password=get_password_hash(user_in.password),
@@ -26,12 +36,12 @@ class UserCRUD:
             status=UserStatus.ACTIVE
         )
         db.add(db_user)
-        db.commit()
-        db.refresh(db_user)
+        await db.commit()
+        await db.refresh(db_user)
         return db_user
 
-    def update(self, db: Session, user_id: int, user_in: UserUpdate) -> Optional[User]:
-        db_user = self.get_by_id(db, user_id)
+    async def update(self, db: AsyncSession, user_id: int, user_in: UserUpdate) -> Optional[User]:
+        db_user = await self.get_by_id(db, user_id)
         if not db_user:
             return None
 
@@ -39,22 +49,23 @@ class UserCRUD:
         for field, value in update_data.items():
             setattr(db_user, field, value)
 
-        db.commit()
-        db.refresh(db_user)
+        await db.commit()
+        await db.refresh(db_user)
         return db_user
 
-    def update_last_login(self, db: Session, user_id: int) -> None:
-        db_user=self.get_by_id(db, user_id)
-        if db_user:
-            db_user.last_login=datetime.utcnow()
-            db.commit()
+    async def update_last_login(self, db: AsyncSession, user_id: int) -> None:
+        result=await db.execute(
+            update(User).where(User.id == user_id)
+            .values(last_login=func.now())
+            .execution_options(synchronize_session="fetch")
+        )
+        await db.commit()
 
-    def delete(self, db: Session, user_id: int) -> bool:
-        db_user=self.get_by_id(db, user_id)
-        if db_user:
-            db.delete(db_user)
-            db.commit()
-            return True
-        return False
+    async def delete(self, db: AsyncSession, user_id: int) -> bool:
+        result=await db.execute(
+            delete(User).where(User.id == user_id)
+        )
+        await db.commit()
+        return result.rowcount > 0
 
 user_crud=UserCRUD()
