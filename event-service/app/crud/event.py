@@ -33,9 +33,7 @@ class EventCRUD:
     async def update(self, db: AsyncSession, event_id: int, obj_in: EventUpdate, owner_id: int) -> Optional[Event]:
         db_obj=await self.get(db, event_id, owner_id)
         if not db_obj:
-            raise ValueError("Event not found")
-        if db_obj.owner_id != owner_id:
-            raise PermissionError("Not enough permissions")
+            return None
 
         update_data=obj_in.model_dump(exclude_unset=True)
         for field, value in update_data.items():

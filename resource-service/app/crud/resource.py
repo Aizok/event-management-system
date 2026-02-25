@@ -44,9 +44,7 @@ class ResourceCRUD:
     async def update_resource(self, db: AsyncSession, resource_id: int, obj_in: ResourceUpdate, owner_id: int) -> Optional[Resource]:
         db_obj=await self.get_resource(db, resource_id, owner_id)
         if not db_obj:
-            raise ValueError("Resource not found")
-        if db_obj.owner_id != owner_id:
-            raise PermissionError("Not enough permissions")
+            return None
 
         update_data=obj_in.model_dump(exclude_unset=True)
         for field, value in update_data.items():
@@ -96,9 +94,7 @@ class ResourceCRUD:
     async def update_allocation(self, db: AsyncSession, allocation_id: int, obj_in: ResourceAllocationUpdate, owner_id: int)->Optional[ResourceAllocation]:
         db_obj=await self.get_allocation(db, allocation_id, owner_id)
         if not db_obj:
-            raise ValueError("Resource allocation not found")
-        if db_obj.owner_id != owner_id:
-            raise PermissionError("Not enough permissions")
+            return None
 
         update_data = obj_in.model_dump(exclude_unset=True)
         for field, value in update_data.items():
