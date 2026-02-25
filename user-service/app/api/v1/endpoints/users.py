@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
-from ....core.security import get_current_user_id
+from ....core.security import get_current_user_id, get_current_admin
 from ....core.database import get_db
 from ....core.config import settings
 from ....crud.user import user_crud
-from ....schemas.user import UserCreate, UserResponse, UserPublicResponse, UserUpdate
+from ....schemas.user import UserCreate, UserResponse, UserPublicResponse, UserUpdate, TokenData
 
 
 router=APIRouter()
@@ -27,7 +27,8 @@ async def read_user_profiles(
         skip: int=0,
         limit: int=100,
         db: AsyncSession=Depends(get_db),
-        admin_user: User=Depends(get_current_user_id)
+        admin_data: TokenData = Depends(get_current_admin)
+        #admin_data Только для проверки роли
 ):
     users=await user_crud.get_multi(db, skip=skip, limit=limit)
     return users
