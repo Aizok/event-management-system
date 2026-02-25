@@ -6,7 +6,7 @@ from ....core.security import get_current_user_id
 from ....core.database import get_db
 from ....core.config import settings
 from ....crud.user import user_crud
-from ....schemas.user import UserCreate, UserResponse, UserUpdate
+from ....schemas.user import UserCreate, UserResponse, UserPublicResponse, UserUpdate
 
 
 router=APIRouter()
@@ -27,8 +27,9 @@ async def read_user_profiles(
         skip: int=0,
         limit: int=100,
         db: AsyncSession=Depends(get_db),
-        user_id: int=Depends(get_current_user_id)):
-    users=await user_crud.get_multi(db, skip=skip, limit=limit, owner_id=user_id)
+        admin_user: User=Depends(get_current_user_id)
+):
+    users=await user_crud.get_multi(db, skip=skip, limit=limit)
     return users
 
 
@@ -46,13 +47,12 @@ async def read_own_profile(
     return profile
 
 
-@router.get("/{user_id}", response_model=UserResponse)
+@router.get("/{user_id}", response_model=UserPublicResponse)
 async def read_user_profile(
         user_id: int,
-        db: AsyncSession=Depends(get_db),
-        current_user_id: int=Depends(get_current_user_id)
+        db: AsyncSession=Depends(get_db)
 ):
-    profile=await user_crud.get(db, user_id, current_user_id)
+    profile=await user_crud.get(db, user_id)
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -68,7 +68,7 @@ async def update_user_profile(
         db: AsyncSession=Depends(get_db),
         current_user_id: int = Depends(get_current_user_id)
 ):
-    user=await user_crud.update(db=db, user_id=user_id, obj_in=user_in)
+    user=await user_crud.update(db=db, user_id=user_id, obj_in=user_in, owner_id=current_user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user

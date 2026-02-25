@@ -31,6 +31,15 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserPublicResponse(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    speciality: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class TokenData(BaseModel):
     user_id: int
     email: Optional[str] = None
