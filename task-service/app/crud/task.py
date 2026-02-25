@@ -33,7 +33,7 @@ class TaskCRUD:
         return result.scalars().all()
 
 
-    async def get_by_event(self, db: AsyncSession, event_id: int, owner_id: int = None) -> List[Task]:
+    async def get_by_event(self, db: AsyncSession, event_id: int, owner_id: Optional[int] = None) -> List[Task]:
         query=select(Task).where(Task.event_id==event_id)
         if owner_id:
             query=query.where(Task.owner_id==owner_id)
