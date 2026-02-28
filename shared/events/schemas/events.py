@@ -21,10 +21,10 @@ class BaseEvent(BaseModel):
     data: Dict[str, Any]={}
 
 class TaskCreated(BaseEvent):
-    event_type = EventType.TASK_CREATED
+    event_type: EventType=EventType.TASK_CREATED
 
 class TaskUpdated(BaseEvent):
-    event_type = EventType.TASK_UPDATED
+    event_type: EventType = EventType.TASK_UPDATED
 
 class EventCreated(BaseEvent):
-    event_type = EventType.EVENT_CREATED
+    event_type: EventType = EventType.EVENT_CREATED

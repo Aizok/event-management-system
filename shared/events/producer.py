@@ -1,17 +1,31 @@
 import aio_pika
+import os
 from typing import Optional
 from .schemas.events import BaseEvent
+from pydantic_settings import BaseSettings
+
+class RabbitMQSettings(BaseSettings):
+    rabbitmq_url: str
+
+    class Config:
+        env_file="/app/.env"
+        extra="ignore"
+
+
+settings = RabbitMQSettings()
+print(f"RabbitMQ URL: {settings.rabbitmq_url }")
 
 class EventProducer:
-    def __init__(self, rabbitmq_url: str="amqp://guest:guest@rabbitmq"):
-        self.rabbitmq_url=rabbitmq_url
+    def __init__(self):
+        self.rabbitmq_url =settings.rabbitmq_url 
         self.connection=None
         self.channel=None
 
     async def connect(self):
-        self.connection=await aio_pika.connect_robust(self.rabbitmq_url)
+        self.connection=await aio_pika.connect_robust(self.rabbitmq_url )
         self.channel=await self.connection.channel()
         await self.channel.set_qos(prefetch_count=1)
+        print(f"Подключён к {self.rabbitmq_url }")
 
     async def publish(self, event: BaseEvent, exchange_name: str="events"):
         """Отправка события"""

@@ -4,12 +4,10 @@ RUN apk add --no-cache curl
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY shared/ /app/shared/
+COPY task-service/ .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
-
-ENV PYTHONPATH=/app
 
 EXPOSE 8004
 

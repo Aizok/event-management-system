@@ -199,7 +199,9 @@ services:
       - app-network
 
   task-service:
-    build: ./task-service
+    build:
+      context: .
+      dockerfile: task-service/Dockerfile
     container_name: task_service
     ports:
       - "8004:8004"
@@ -210,8 +212,7 @@ services:
       postgres_tasks:
         condition: service_healthy
     volumes:
-      - ./task-service:/app
-      - /app/__pycache__
+      - ./shared:/app/shared:ro
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8004/health"]
       interval: 30s
