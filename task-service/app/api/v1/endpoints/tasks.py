@@ -6,6 +6,7 @@ from ....core.database import get_db
 from ....core.security import get_current_user_id
 from ....crud.task import task_crud
 from ....schemas.task import TaskCreate, TaskUpdate, TaskResponse
+from ....core.events import publish_task_created, publish_task_updated
 
 
 router = APIRouter()
@@ -17,6 +18,10 @@ async def create_task(
         user_id: int = Depends(get_current_user_id)
 ):
     task=await task_crud.create(db=db, obj_in=task_in, owner_id=user_id)
+
+    """Отправка события TaskCreated"""
+    await publish_task_created(db, task.id)
+
     return task
 
 @router.get("/", response_model=List[TaskResponse])
@@ -57,9 +62,23 @@ async def update_task(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
+    old_task=await task_crud.get(db, task_id, owner_id=user_id)
+    if not old_task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    previous_status=old_task.status
+
     task=await task_crud.update(db=db, task_id=task_id, obj_in=task_in, owner_id=user_id)
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    """Формировка изменений"""
+    changes=task_in.model_dump(exclude_unset=True)
+    changes['previous_status']=previous_status
+
+    """Отправка события TaskCreated"""
+    await publish_task_updated(db, task.id, changes)
+
     return task
 
 
