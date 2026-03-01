@@ -1,5 +1,4 @@
 import aio_pika
-import os
 from typing import Optional
 from .schemas.events import BaseEvent
 from pydantic_settings import BaseSettings
