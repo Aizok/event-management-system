@@ -32,7 +32,7 @@ async def start_user_consumer():
     queue=await consumer.consume(
         queue_name="user_events",
         routing_keys=[
-            "TaskCreated.task_service"
+            "TaskCreated.task-service"
         ],
         callback=handle_task_created
     )

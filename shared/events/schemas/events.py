@@ -16,7 +16,7 @@ class BaseEvent(BaseModel):
     event_type: EventType
     event_id: Optional[int]=None
     source_service: str
-    source_entity_id: int
+    source_entity_id: Optional[int]
     timestamp: datetime=Field(default_factory=lambda: datetime.now(timezone.utc))
     data: Dict[str, Any]={}
 
