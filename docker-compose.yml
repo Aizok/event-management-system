@@ -1,7 +1,4 @@
 services:
-  # ========================================
-  # БАЗЫ ДАННЫХ
-  # ========================================
   postgres_auth:
     image: postgres:15-alpine
     container_name: postgres_auth
@@ -175,7 +172,9 @@ services:
       - app-network
 
   user-service:
-    build: ./user-service
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
     container_name: user_service
     ports:
       - "8003:8003"
@@ -185,9 +184,10 @@ services:
     depends_on:
       postgres_users:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     volumes:
-      - ./user-service:/app
-      - /app/__pycache__
+      - ./shared:/app/shared:ro
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8003/health" ]
       interval: 30s
@@ -210,6 +210,8 @@ services:
       - SECRET_KEY=${SECRET_KEY}
     depends_on:
       postgres_tasks:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     volumes:
       - ./shared:/app/shared:ro

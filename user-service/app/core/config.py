@@ -7,12 +7,14 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
 
-    DEBUG: bool = True
+    RABBITMQ_URL: str
+
     PROJECT_NAME: str="User Service"
     VERSION: str = "1.0.0"
 
     class Config:
         env_file=".env"
+        extra = "ignore"
 
 
 settings=Settings()

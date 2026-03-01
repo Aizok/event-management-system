@@ -72,7 +72,7 @@ async def update_task(
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
-    """Формировка изменений"""
+    """Формирование изменений"""
     changes=task_in.model_dump(exclude_unset=True)
     changes['previous_status']=previous_status
 
