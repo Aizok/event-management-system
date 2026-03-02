@@ -10,7 +10,7 @@ logger=logging.getLogger(__name__)
 consumer=EventConsumer()
 
 async def handle_task_created(event: BaseEvent):
-    """Обработчик события TaskCreated создаём уведомление в бд"""
+    """Обработчик события TaskCreated - создаём уведомление в бд"""
     logger.info(f"Task Created received: task_id={event.event_id}, title='{event.data.get('title')}'")
 
     task_data=event.data

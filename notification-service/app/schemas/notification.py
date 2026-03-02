@@ -25,3 +25,9 @@ class NotificationResponse(NotificationBase):
     max_retries: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TokenData(BaseModel):
+    user_id: int
+    email: Optional[str] = None
+    role: Optional[str] = None

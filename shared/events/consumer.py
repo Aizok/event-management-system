@@ -2,7 +2,7 @@ import asyncio
 
 import aio_pika
 import json
-from typing import Optional, Callable
+from typing import Optional, Callable, Awaitable
 from .schemas.events import BaseEvent
 from pydantic_settings import BaseSettings
 
@@ -24,7 +24,6 @@ class EventConsumer:
         self.connection=None
         self.channel=None
         self.consume_task = None
-        self.callback=None
 
     async def connect(self):
         self.connection=await aio_pika.connect_robust(self.rabbitmq_url)
@@ -34,10 +33,10 @@ class EventConsumer:
 
     async def consume(
             self,
-            exchange_name: str="events",
-            queue_name: str="user_events",
-            routing_keys: list=["TaskCreated.task-service"],
-            callback: Callable[[BaseEvent], None]=None
+            queue_name: str,
+            routing_keys: list[str],
+            exchange_name: str = "events",
+            callback: Callable[[BaseEvent], Awaitable[None]]=None
     ):
         """Получение сообщения"""
         if not self.channel:
@@ -66,8 +65,8 @@ class EventConsumer:
                     event=BaseEvent.model_validate(event_data)
 
                     print(f"Получено событие {event.event_type.value} (id={event.event_id})")
-                    if self.callback:
-                        await self.callback(event)
+                    if callback:
+                        await callback(event)
 
                 except Exception as e:
                     print(f"Ошибка обработки события: {e}")
