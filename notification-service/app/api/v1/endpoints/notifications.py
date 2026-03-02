@@ -1,89 +1,97 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
+from datetime import datetime
 
-from ....core.security import get_current_user_id, get_current_admin
 from ....core.database import get_db
 from ....core.config import settings
 from ....crud.notification import notification_crud
-from ....schemas.notification import NotificationCreate, NotificationResponse
+from ....schemas.notification import NotificationCreate, NotificationResponse, NotificationStatus
 
 
 router=APIRouter()
 
 
-@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def create_user_profile(
-        user_in: UserCreate,
-        db: AsyncSession=Depends(get_db),
-        user_id: int=Depends(get_current_user_id)
-):
-    user=await user_crud.create(db=db, obj_in=user_in, owner_id=user_id)
-    return user
-
-
-@router.get("/", response_model=List[UserResponse])
-async def read_user_profiles(
-        skip: int=0,
-        limit: int=100,
-        db: AsyncSession=Depends(get_db),
-        admin_data: TokenData = Depends(get_current_admin)
-        #admin_data Только для проверки роли
-):
-    users=await user_crud.get_multi(db, skip=skip, limit=limit)
-    return users
-
-
-@router.get("/me", response_model=UserResponse)
-async def read_own_profile(
-    db: AsyncSession = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id)
-):
-    profile = await user_crud.get(db, current_user_id)
-    if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User profile not found"
-        )
-    return profile
-
-
-@router.get("/{user_id}", response_model=UserPublicResponse)
-async def read_user_profile(
-        user_id: int,
+@router.post("/", response_model=NotificationResponse, status_code=status.HTTP_201_CREATED)
+async def create_notification(
+        notification_in: NotificationCreate,
         db: AsyncSession=Depends(get_db)
 ):
-    profile=await user_crud.get(db, user_id)
-    if not profile:
+    notification=await notification_crud.create(db=db, obj_in=notification_in)
+    return notification
+
+
+@router.get("/", response_model=List[NotificationResponse])
+async def read_notifications(
+        skip: int=0,
+        limit: int=100,
+        db: AsyncSession = Depends(get_db),
+        notification_status: NotificationStatus | None = None
+):
+    notifications=await notification_crud.get_multi(db=db, skip=skip, limit=limit, status=notification_status)
+    return notifications
+
+
+@router.get("/pending", response_model=List[NotificationResponse])
+async def read_pending_notifications(
+    db: AsyncSession = Depends(get_db)
+):
+    """Уведомление для отправки (PENDING статус)"""
+    notifications = await notification_crud.get_pending(db)
+    return notifications
+
+
+@router.get("/{notification_id}", response_model=NotificationResponse)
+async def read_notification(
+        notification_id: int,
+        db: AsyncSession=Depends(get_db)
+):
+    notification=await notification_crud.get(db, notification_id)
+    if not notification:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User profile not found"
+            detail="Notification not found"
         )
-    return profile
+    return notification
 
 
-@router.put("/{user_id}", response_model=UserResponse)
-async def update_user_profile(
-        user_id: int,
-        user_in: UserUpdate,
-        db: AsyncSession=Depends(get_db),
-        current_user_id: int = Depends(get_current_user_id)
+@router.get("/task/{task_id}", response_model=List[NotificationResponse])
+async def read_notifications_by_task(
+        task_id: int,
+        db: AsyncSession=Depends(get_db)
 ):
-    user=await user_crud.update(db=db, user_id=user_id, obj_in=user_in, owner_id=current_user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
+    """Уведомление по task_id (из события TaskCreated)"""
+    notifications=await notification_crud.get_by_task(db=db, task_id=task_id)
+    return notifications
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user_profile(
-        user_id: int,
-        db: AsyncSession=Depends(get_db),
-        current_user_id: int=Depends(get_current_user_id)
+@router.patch("/{notification_id}/status", response_model=NotificationResponse)
+async def update_notification_status(
+        notification_id: int,
+        notification_status: NotificationStatus,
+        sent_at: datetime=None,
+        db: AsyncSession=Depends(get_db)
 ):
-    success=await user_crud.delete(db, user_id, current_user_id)
+    """Обновить статус уведомления"""
+    notification=await notification_crud.update_status(
+        db=db,
+        notification_id=notification_id,
+        status=notification_status,
+        sent_at=sent_at
+    )
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return notification
+
+
+@router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_notification(
+        notification_id: int,
+        db: AsyncSession=Depends(get_db)
+):
+    success=await notification_crud.delete(db=db, notification_id=notification_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User profile not found"
+            detail="Notification not found"
         )
