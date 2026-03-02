@@ -89,6 +89,23 @@ services:
     networks:
       - app-network
 
+  postgres_notifications:
+    image: postgres:15-alpine
+    container_name: postgres_notifications
+    environment:
+      POSTGRES_DB: notif_db
+      POSTGRES_USER: notif_user
+      POSTGRES_PASSWORD: notif_password
+      POSTGRES_INITDB_ARGS: --encoding=UTF8 --lc-collate=ru_RU.UTF-8 --lc-ctype=ru_RU.UTF-8
+    ports:
+      - "5438:5432"
+    volumes:
+      - postgres_notifications_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U notif_user -d notif_db" ]
+    networks:
+      - app-network
+
   redis_cache:
     image: redis:7-alpine
     container_name: redis_cache
@@ -249,6 +266,33 @@ services:
     networks:
       - app-network
 
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: notification_service
+    ports:
+      - "8006:8006"
+    environment:
+      - DATABASE_URL=postgresql://notif_user:notif_password@postgres_notifications:5432/notif_db
+      - SECRET_KEY=${SECRET_KEY}
+    depends_on:
+      postgres_notifications:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./shared:/app/shared:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8006/health" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - app-network
+
   nginx:
     image: nginx:alpine
     container_name: api-gateway
@@ -274,6 +318,7 @@ volumes:
   postgres_users_data:
   postgres_tasks_data:
   postgres_resources_data:
+  postgres_notifications_data:
   redis_data:
   rabbitmq_data:
 

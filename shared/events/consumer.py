@@ -36,7 +36,7 @@ class EventConsumer:
             self,
             exchange_name: str="events",
             queue_name: str="user_events",
-            routing_keys:list=["TaskCreated.task-service"],
+            routing_keys: list=["TaskCreated.task-service"],
             callback: Callable[[BaseEvent], None]=None
     ):
         """Получение сообщения"""
