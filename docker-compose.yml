@@ -308,6 +308,7 @@ services:
       - event-service
       - task-service
       - resource-service
+      - notification-service
     restart: unless-stopped
     networks:
       - app-network

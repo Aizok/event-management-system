@@ -40,7 +40,7 @@ app=FastAPI(
 )
 
 
-app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["notifications"])
+app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"])
 
 
 @app.get("/health")

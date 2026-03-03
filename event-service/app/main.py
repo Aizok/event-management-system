@@ -18,11 +18,12 @@ app=FastAPI(
     lifespan=lifespan
 )
 
-app.include_router(events.router, prefix="/api/v1/events", tags=["events"])
+app.include_router(events.router, prefix="/api/events", tags=["events"])
 
 @app.get("/health")
 async def health_check():
     return {
         "status": "healthy",
-        "service": "event-service"
+        "service": "event-service",
+        "database_url": settings.DATABASE_URL
     }

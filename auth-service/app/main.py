@@ -18,7 +18,7 @@ app=FastAPI(
     lifespan=lifespan
 )
 
-app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 
 
 @app.get("/health")
@@ -26,5 +26,5 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "auth-service",
-        "database_url": str(settings.DATABASE_URL)[:50] + "..."
+        "database_url": settings.DATABASE_URL
     }
