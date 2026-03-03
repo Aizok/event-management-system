@@ -1,25 +1,28 @@
 import logging
 from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from ..crud.notification import notification_crud
 from shared.events.consumer import EventConsumer
-from shared.events.schemas.events import BaseEvent, TaskCreated
+from shared.events.schemas.events import TaskCreated
+from ..schemas.notification import NotificationCreate, NotificationType
 
 logger=logging.getLogger(__name__)
 
 consumer=EventConsumer()
 
-async def handle_task_created(event: BaseEvent):
+async def handle_task_created(event: TaskCreated, db: AsyncSession):
     """Обработчик события TaskCreated - создаём уведомление в бд"""
-    logger.info(f"Task Created received: task_id={event.event_id}, title='{event.data.get('title')}'")
+    task_id=event.source_entity_id
+    logger.info(f"Task Created received: task_id={task_id}, title='{event.data.get('title')}'")
 
     task_data=event.data
     user_id=task_data.get("assignee_id") or task_data.get("owner_id")
 
-    if user_id:
+    if user_id and task_id:
         # TODO: 1. Найти пользователя в БД
         # TODO: 2. Отправить email/push notification
         # TODO: 3. Обновить user notifications в БД
+
 
         logger.info(f"Notification Created for user {user_id} about task with id={event.event_id}")
     else:

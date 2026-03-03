@@ -26,7 +26,6 @@ async def publish_task_created(db: AsyncSession, task_id: int):
                 "description": getattr(task, 'description', None),
                 "owner_id": task.owner_id,
                 "assignee_id": getattr(task, 'assignee_id', None),
-                "event_id": getattr(task, 'event_id', None),
                 "status": getattr(task, 'status', TaskStatus.TODO.value),
                 "priority": getattr(task, 'priority', TaskPriority.MEDIUM.value),
                 "deadline": str(deadline) if deadline else None

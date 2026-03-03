@@ -11,7 +11,9 @@ consumer=EventConsumer()
 
 async def handle_task_created(event: BaseEvent):
     """Обработчик события TaskCreated – шлём пользователю уведомление"""
-    logger.info(f"Task Created received: task_id={event.event_id}, title='{event.data.get('title')}'")
+    task_id = event.source_entity_id
+    event_id = event.event_id
+    logger.info(f"Task Created received: task_id={task_id}, event_id={event_id}, title='{event.data.get('title')}'")
 
     task_data=event.data
     user_id=task_data.get("assignee_id") or task_data.get("owner_id")
@@ -21,9 +23,9 @@ async def handle_task_created(event: BaseEvent):
         # TODO: 2. Отправить email/push notification
         # TODO: 3. Обновить user notifications в БД
 
-        logger.info(f"Notification was sent to user {user_id} about task with id={event.event_id}")
+        logger.info(f"Notification was sent to user {user_id} about task with id={task_id} (event_id={event_id})")
     else:
-        logger.warning(f"There is no user_id in task {event.event_id}")
+        logger.warning(f"There is no user_id in task {task_id} (event_id={event_id})")
 
 
 async def start_user_consumer():
