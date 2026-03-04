@@ -10,22 +10,22 @@ logging.basicConfig(level=logging.INFO)
 logger=logging.getLogger(__name__)
 
 # Глобальная переменная для управления consumer
-consumer_queue=None
+consumer_background_task=None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"{settings.PROJECT_NAME} starting")
 
-    global consumer_queue
+    global consumer_background_task
     consumer_task=asyncio.create_task(start_notification_consumer())
-    consumer_queue=consumer_task #Ссылка
+    consumer_background_task=consumer_task #Ссылка
 
     yield
 
-    if consumer_queue:
-        consumer_queue.cancel()
+    if consumer_background_task:
+        consumer_background_task.cancel()
         try:
-            await consumer_queue
+            await consumer_background_task
         except asyncio.CancelledError:
             logger.info("Notification Consumer task cancelled")
     await consumer.close()
