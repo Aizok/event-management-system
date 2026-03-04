@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     PROJECT_NAME: str="Notification Service"
     VERSION: str="1.0.0"
 
+    SMTP_HOST: str
+    SMTP_PORT: int = 587
+    SENDER_EMAIL: str
+    SENDER_PASSWORD: str
+
     class Config:
         env_file=".env"
         extra = "ignore"
