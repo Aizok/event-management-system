@@ -43,6 +43,7 @@ class NotificationCRUD:
             select(Notification)
             .where(Notification.status == NotificationStatus.PENDING)
             .order_by(Notification.created_at)
+            .limit(10)
         )
         return result.scalars().all()
 

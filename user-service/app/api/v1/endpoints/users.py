@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
-from ....core.security import get_current_user_id, get_current_admin
+from ....core.security import get_current_user_id, get_current_admin, get_current_user_data
 from ....core.database import get_db
 from ....core.config import settings
 from ....crud.user import user_crud
@@ -51,7 +51,8 @@ async def read_own_profile(
 @router.get("/{user_id}", response_model=UserPublicResponse)
 async def read_user_profile(
         user_id: int,
-        db: AsyncSession=Depends(get_db)
+        db: AsyncSession=Depends(get_db),
+        token_data: TokenData = Depends(get_current_user_data)
 ):
     profile=await user_crud.get(db, user_id)
     if not profile:
@@ -59,6 +60,13 @@ async def read_user_profile(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User profile not found"
         )
+
+    if profile.auth_user_id!=token_data.user_id and token_data.role!="admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+
     return profile
 
 
@@ -67,23 +75,34 @@ async def update_user_profile(
         user_id: int,
         user_in: UserUpdate,
         db: AsyncSession=Depends(get_db),
-        current_user_id: int = Depends(get_current_user_id)
+        token_data: TokenData = Depends(get_current_user_data)
 ):
-    user=await user_crud.update(db=db, user_id=user_id, obj_in=user_in, owner_id=current_user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
+    profile=await user_crud.get(db, user_id)
+
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if profile.auth_user_id != token_data.user_id and token_data.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+
+    return await user_crud.update(db=db, user_id=user_id, obj_in=user_in)
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user_profile(
         user_id: int,
         db: AsyncSession=Depends(get_db),
-        current_user_id: int=Depends(get_current_user_id)
+        token_data: TokenData = Depends(get_current_user_data)
 ):
-    success=await user_crud.delete(db, user_id, current_user_id)
+    profile = await user_crud.get(db, user_id)
+
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if profile.auth_user_id != token_data.user_id and token_data.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+
+    success = await user_crud.delete(db, user_id)
+
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User profile not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")

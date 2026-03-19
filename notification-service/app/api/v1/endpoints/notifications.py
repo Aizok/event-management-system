@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from datetime import datetime
@@ -7,6 +7,13 @@ from ....core.database import get_db
 from ....core.config import settings
 from ....crud.notification import notification_crud
 from ....schemas.notification import NotificationCreate, NotificationResponse, NotificationStatus
+
+from ....core.user_client import get_user_email
+from ....core.email import send_email
+
+from datetime import datetime, timezone
+import logging
+logger = logging.getLogger(__name__)
 
 
 router=APIRouter()
@@ -68,19 +75,39 @@ async def read_notifications_by_task(
 @router.patch("/{notification_id}/status", response_model=NotificationResponse)
 async def update_notification_status(
         notification_id: int,
-        notification_status: NotificationStatus,
-        sent_at: datetime=None,
+        notification_status: NotificationStatus = Query(..., description="sent|failed"),
         db: AsyncSession=Depends(get_db)
 ):
-    """Обновить статус уведомления"""
+    # Получение уведомления
+    notification = await notification_crud.get(db, notification_id)
+    if not notification:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found")
+
+    # Получение почты юзера
+    user_email=await get_user_email(notification.user_id)
+    if not user_email:
+        await notification_crud.update_status(db, notification_id, NotificationStatus.FAILED)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User email not found")
+
+    # Отправка письма
+    success=send_email(
+        to_email=user_email,
+        subject=notification.title,
+        body=notification.message or "New task assigned"
+    )
+
+    # Обновление статуса
+    final_status=NotificationStatus.SENT if success else NotificationStatus.FAILED
+    sent_at = datetime.now(timezone.utc) if final_status == NotificationStatus.SENT else None
+
     notification=await notification_crud.update_status(
         db=db,
         notification_id=notification_id,
-        status=notification_status,
+        status=final_status,
         sent_at=sent_at
     )
-    if not notification:
-        raise HTTPException(status_code=404, detail="Notification not found")
+
+    logger.info(f"Notification {notification_id}: {final_status} → {user_email}")
     return notification
 
 
