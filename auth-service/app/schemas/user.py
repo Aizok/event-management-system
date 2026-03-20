@@ -1,3 +1,4 @@
+import enum
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
@@ -40,7 +41,15 @@ class Token(BaseModel):
     expires_in: int
 
 
+class TokenRole(str, enum.Enum):
+    ADMIN = "admin"
+    ORGANIZER = "organizer"
+    EXECUTOR = "executor"
+    VIEWER = "viewer"
+    SERVICE = "service"
+
+
 class TokenData(BaseModel):
-    user_id: int
-    email: str
-    role: UserRole
+    user_id: int | None = None
+    email: str | None = None
+    role: TokenRole

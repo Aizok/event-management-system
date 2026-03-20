@@ -7,7 +7,11 @@ from ....core.database import get_db
 from ....core.config import settings
 from ....crud.user import user_crud
 from ....schemas.user import UserCreate, UserResponse, UserPublicResponse, UserUpdate, TokenData
+from ....core.auth_client import get_user_email_from_auth
 
+from fastapi.security import OAuth2PasswordBearer
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 router=APIRouter()
 
@@ -16,9 +20,18 @@ router=APIRouter()
 async def create_user_profile(
         user_in: UserCreate,
         db: AsyncSession=Depends(get_db),
-        user_id: int=Depends(get_current_user_id)
+        token_data: TokenData = Depends(get_current_user_data)
 ):
-    user=await user_crud.create(db=db, obj_in=user_in, owner_id=user_id)
+    email=await get_user_email_from_auth(
+        auth_user_id=token_data.user_id
+    )
+
+    user = await user_crud.create(
+        db=db,
+        obj_in=user_in,
+        owner_id=token_data.user_id,
+        email=email
+    )
     return user
 
 

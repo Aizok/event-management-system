@@ -18,6 +18,8 @@ class UserProfile(Base):
         index=True
     )
 
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+
     first_name:Mapped[str]=mapped_column(String(100), nullable=False)
     last_name:Mapped[str]=mapped_column(String(100), nullable=False)
     phone: Mapped[Optional[str]]=mapped_column(String(20), unique=True, nullable=True, index=True)
@@ -28,4 +30,4 @@ class UserProfile(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now())
 
     def __repr__(self):
-        return f"<User(id={self.id}, email='{self.email}', role={self.role.value})>"
+        return f"<User(id={self.id}, email='{self.email}')>"

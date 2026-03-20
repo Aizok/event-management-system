@@ -20,6 +20,7 @@ class UserUpdate(BaseModel):
 class UserResponse(BaseModel):
     id: int
     auth_user_id: int
+    email: str
     first_name: str
     last_name: str
     phone: Optional[str] = None

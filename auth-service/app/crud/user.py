@@ -8,7 +8,7 @@ from ..schemas.user import UserCreate, UserUpdate
 from ..core.security import get_password_hash
 
 
-class UserCRUD:
+class AuthCRUD:
     async def get_by_id(self, db: AsyncSession, user_id: int) -> Optional[User]:
         result=await db.execute(
             select(User).where(User.id==user_id)
@@ -68,4 +68,4 @@ class UserCRUD:
         await db.commit()
         return result.rowcount > 0
 
-user_crud=UserCRUD()
+auth_crud=AuthCRUD()

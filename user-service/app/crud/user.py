@@ -6,8 +6,12 @@ from ..schemas.user import UserCreate, UserUpdate
 
 
 class UserCRUD:
-    async def create(self, db: AsyncSession, obj_in: UserCreate, owner_id: int) -> UserProfile:
-        db_obj=UserProfile(**obj_in.dict(), auth_user_id=owner_id)
+    async def create(self, db: AsyncSession, obj_in: UserCreate, owner_id: int, email: str) -> UserProfile:
+        db_obj = UserProfile(
+            **obj_in.dict(),
+            auth_user_id=owner_id,
+            email=email
+        )
         db.add(db_obj)
         await db.commit()
         await db.refresh(db_obj)

@@ -2,7 +2,7 @@ import httpx
 from typing import Optional
 from .config import settings
 from fastapi import status
-
+from .auth_client import get_service_token
 
 
 import logging
@@ -12,30 +12,18 @@ logger=logging.getLogger(__name__)
 async def get_user_email(user_id: int) -> Optional[str]:
     async with httpx.AsyncClient() as client:
         try:
-            user_resp=await client.get(
-                f"http://localhost:8080/api/users/{user_id}",
-                headers={"Authorization": f"Bearer {settings.SECRET_KEY}"}
+            token = await get_service_token()
+
+            resp = await client.get(
+                f"http://gateway:8080/api/users/internal/{user_id}",
+                headers={"Authorization": f"Bearer {token}"}
             )
-            if user_resp.status_code!=status.HTTP_200_OK:
-                logger.error(f"user-service error: {user_resp.status_code}")
+
+            if resp.status_code != status.HTTP_200_OK:
                 return None
 
-            user_profile=user_resp.json()
-            auth_user_id = user_profile.get("auth_user_id")
-            if not auth_user_id:
-                logger.error("auth_user_id not found")
-                return None
-
-            auth_resp = await client.get(
-                f"http://localhost:8080/api/auth/users/{auth_user_id}",
-                headers={"Authorization": f"Bearer {settings.SECRET_KEY}"}
-            )
-            if auth_resp.status_code != status.HTTP_200_OK:
-                logger.error(f"user-service error: {auth_resp.status_code}")
-                return None
-
-            auth_data=auth_resp.json()
-            return auth_data.get("email")
+            return resp.json().get("email")
 
         except Exception as e:
-            logger.error(f"")
+            logger.error(f"Error: {e}")
+            return None
