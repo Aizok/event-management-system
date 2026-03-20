@@ -63,15 +63,26 @@ def get_current_user_data(token: str=Depends(oauth2_scheme)) -> TokenData:
         headers={"WWW-Authenticate": "Bearer"}
     )
     try:
-        payload=jwt.decode(token, settings.SECRET_KEY, algorithms=settings.ALGORITHM)
-        user_id: str= payload.get("sub")
-        email: str= payload.get("email")
-        role: str= payload.get("role")
+        payload=jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id: str = payload.get("sub")
+        email: str = payload.get("email")
+        role: str = payload.get("role")
+
+        if role == "service":
+            return TokenData(
+                user_id=None,
+                email=None,
+                role=TokenRole.SERVICE
+            )
 
         if user_id is None:
             raise credentials_exception
 
-        return TokenData(user_id=int(user_id), email=email, role=TokenRole(role))
+        return TokenData(
+            user_id=int(user_id),
+            email=email,
+            role=TokenRole(role)
+        )
     except JWTError:
         raise credentials_exception
 

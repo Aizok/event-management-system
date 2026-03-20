@@ -1,3 +1,3 @@
-from .user import user_crud
+from .user import auth_crud
 
-__all__ = ["user_crud"]
+__all__ = ["auth_crud"]

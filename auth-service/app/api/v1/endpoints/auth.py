@@ -89,7 +89,13 @@ async def get_user_internal(
     db: AsyncSession = Depends(get_db),
     service: TokenData = Depends(get_current_service)
 ):
-    user = await auth_crud.get(db, user_id)
+    user = await auth_crud.get_by_id(db, user_id)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with id={user_id} not found"
+        )
 
     return {
         "id": user.id,

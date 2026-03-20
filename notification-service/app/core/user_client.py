@@ -15,7 +15,7 @@ async def get_user_email(user_id: int) -> Optional[str]:
             token = await get_service_token()
 
             resp = await client.get(
-                f"http://gateway:8080/api/users/internal/{user_id}",
+                f"http://nginx/api/users/internal/{user_id}",
                 headers={"Authorization": f"Bearer {token}"}
             )
 
