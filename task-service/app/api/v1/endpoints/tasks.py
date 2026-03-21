@@ -24,6 +24,7 @@ async def create_task(
 
     return task
 
+
 @router.get("/", response_model=List[TaskResponse])
 async def read_tasks(
         skip: int = 0,
