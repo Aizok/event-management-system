@@ -15,15 +15,16 @@ async def get_user_email(user_id: int) -> Optional[str]:
             token = await get_service_token()
 
             resp = await client.get(
-                f"http://nginx/api/users/internal/{user_id}",
+                f"http://user_service:8001/api/v1/internal/{user_id}",
                 headers={"Authorization": f"Bearer {token}"}
             )
 
             if resp.status_code != status.HTTP_200_OK:
+                logger.error(f"Failed to get user email: {resp.status_code} {resp.text}")
                 return None
 
             return resp.json().get("email")
 
         except Exception as e:
-            logger.error(f"Error: {e}")
+            logger.error(f"Error fetching user email: {e}")
             return None

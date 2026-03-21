@@ -42,6 +42,6 @@ class UserPublicResponse(BaseModel):
 
 
 class TokenData(BaseModel):
-    user_id: int
+    user_id: Optional[int] = None  # None для сервисов
     email: Optional[str] = None
     role: Optional[str] = None

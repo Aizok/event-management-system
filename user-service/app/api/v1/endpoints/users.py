@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
-from ....core.security import get_current_user_id, get_current_admin, get_current_user_data
+from ....core.security import get_current_user_id, get_current_admin, get_current_user_data, get_current_service
 from ....core.database import get_db
 from ....core.config import settings
 from ....crud.user import user_crud
@@ -45,6 +45,30 @@ async def read_user_profiles(
 ):
     users=await user_crud.get_multi(db, skip=skip, limit=limit)
     return users
+
+
+@router.get("/internal/{user_id}")
+async def get_user_internal(
+        user_id: int,
+        db: AsyncSession=Depends(get_db),
+        service: TokenData=Depends(get_current_service)
+):
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logging.info(f"Service token data: {service}")
+
+    user = await user_crud.get(db, user_id)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with id={user_id} not found"
+        )
+
+    return {
+        "id": user.id,
+        "email": user.email
+    }
 
 
 @router.get("/me", response_model=UserResponse)
