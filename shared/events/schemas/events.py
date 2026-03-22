@@ -5,12 +5,13 @@ from enum import Enum
 from uuid import uuid4
 
 class EventType(str, Enum):
-    TASK_CREATED="TaskCreated"
-    TASK_UPDATED="TaskUpdated"
-    TASK_COMPLETED="TaskCompleted"
-    EVENT_CREATED="EventCreated"
-    RESOURCE_ALLOCATED="ResourceAllocated"
-    RESOURCE_RELEASED="ResourceReleased"
+    TASK_CREATED = "TaskCreated"
+    TASK_UPDATED = "TaskUpdated"
+    TASK_ASSIGNED = "TaskAssigned"
+    TASK_COMPLETED = "TaskCompleted"
+    EVENT_CREATED = "EventCreated"
+    RESOURCE_ALLOCATED = "ResourceAllocated"
+    RESOURCE_RELEASED = "ResourceReleased"
 
 class BaseEvent(BaseModel):
     event_type: EventType
@@ -23,8 +24,14 @@ class BaseEvent(BaseModel):
 class TaskCreated(BaseEvent):
     event_type: EventType=EventType.TASK_CREATED
 
+class TaskAssigned(BaseEvent):
+    event_type: EventType = EventType.TASK_ASSIGNED
+
 class TaskUpdated(BaseEvent):
     event_type: EventType = EventType.TASK_UPDATED
 
 class EventCreated(BaseEvent):
     event_type: EventType = EventType.EVENT_CREATED
+
+class TaskCompleted(BaseEvent):
+    event_type: EventType = EventType.TASK_COMPLETED

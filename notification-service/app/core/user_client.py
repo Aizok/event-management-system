@@ -13,11 +13,13 @@ async def get_user_email(user_id: int) -> Optional[str]:
     async with httpx.AsyncClient() as client:
         try:
             token = await get_service_token()
+            url = f"http://user-service:8003/api/users/internal/{user_id}"
 
             resp = await client.get(
-                f"http://user_service:8001/api/v1/internal/{user_id}",
+                url,
                 headers={"Authorization": f"Bearer {token}"}
             )
+            logger.info(f"Response from user-service: {resp.status_code} {resp.text}")
 
             if resp.status_code != status.HTTP_200_OK:
                 logger.error(f"Failed to get user email: {resp.status_code} {resp.text}")

@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
-from datetime import datetime
 
 from ....core.database import get_db
 from ....core.config import settings

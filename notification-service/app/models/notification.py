@@ -23,7 +23,8 @@ class Notification(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     task_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
-    user_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
+    recipient_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
+    initiator_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
 
     type: Mapped[NotificationType] = mapped_column(
         SAEnum(NotificationType),

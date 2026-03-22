@@ -5,7 +5,8 @@ from ..models.notification import NotificationType, NotificationStatus
 
 class NotificationBase(BaseModel):
     task_id: int=Field(..., gt=0) # Из события TaskCreated
-    user_id: int=Field(..., gt=0) # Из события assignee_id
+    recipient_id: int=Field(..., gt=0) # Из события assignee_id
+    initiator_id: int=Field(..., gt=0)
     type: NotificationType=NotificationType.EMAIL
     title: str=Field(..., max_length=255)
 

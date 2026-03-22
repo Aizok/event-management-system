@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.events.producer import EventProducer
-from shared.events.schemas.events import TaskCreated, TaskUpdated
+from shared.events.schemas.events import TaskCreated, TaskUpdated, TaskAssigned
 from .database import get_db
 from ..crud.task import task_crud
 from ..models.task import TaskStatus, TaskPriority
@@ -34,6 +34,21 @@ async def publish_task_created(db: AsyncSession, task_id: int):
         await producer.publish(event)
         logger.info(f"TaskCreated(id={task_id}):  {event.data['title']}")
 
+        if task.assignee_id:
+            assigned_event=TaskAssigned(
+                source_service="task-service",
+                source_entity_id=task_id,
+                data={
+                    "assignee_id": task.assignee_id,
+                    "owner_id": task.owner_id,
+                    "title": task.title
+                }
+            )
+            await producer.publish(assigned_event)
+            logger.info(
+                f"TaskAssigned(id={task_id}): assignee={task.assignee_id}"
+            )
+
 
 async def publish_task_updated(
         db: AsyncSession,
@@ -55,3 +70,19 @@ async def publish_task_updated(
         )
         await producer.publish(event)
         logger.info(f"Task Updated (id={task_id}): {changes}")
+
+        if "assignee_id" in changes and changes["assignee_id"] is not None:
+            assigned_event = TaskAssigned(
+                source_service="task-service",
+                source_entity_id=task_id,
+                data={
+                    "assignee_id": changes["assignee_id"],
+                    "owner_id": task.owner_id,
+                    "title": task.title
+                }
+            )
+
+            await producer.publish(assigned_event)
+            logger.info(
+                f"TaskAssigned (id={task_id}): assignee={changes['assignee_id']}"
+            )
