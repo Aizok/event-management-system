@@ -87,6 +87,6 @@ async def start_notification_consumer():
         ],
         callback=handle_task_assigned
     )
-    logger.info(f"Notification_events consumer was starting on queue: {queue.name}")
+    logger.info(f"Notification_events consumer started")
     return queue
 
