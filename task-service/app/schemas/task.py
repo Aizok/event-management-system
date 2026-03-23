@@ -1,3 +1,5 @@
+import enum
+
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
@@ -38,7 +40,15 @@ class TaskResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TokenRole(str, enum.Enum):
+    ADMIN = "admin"
+    ORGANIZER = "organizer"
+    EXECUTOR = "executor"
+    VIEWER = "viewer"
+    SERVICE = "service"
+
+
 class TokenData(BaseModel):
-    user_id: int
-    email: Optional[str] = None
-    role: Optional[str] = None
+    user_id: int | None = None
+    email: str | None = None
+    role: TokenRole
