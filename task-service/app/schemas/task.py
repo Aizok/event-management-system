@@ -35,6 +35,7 @@ class TaskResponse(BaseModel):
     deadline: Optional[datetime]
     updated_at: Optional[datetime]
     event_id: int
+    owner_id: int
     assignee_id: Optional[int]
 
     model_config = ConfigDict(from_attributes=True)
