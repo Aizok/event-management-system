@@ -13,12 +13,7 @@ oauth2_scheme=OAuth2PasswordBearer(tokenUrl="auth/login")
 def decode_access_token(token: str) -> Optional[TokenData]:
     try:
         payload=jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id: int = payload.get("sub")
-        email: str = payload.get("email")
-        role: str = payload.get("role")
-
-        if role is None:
-            return None
+        role = payload.get("role")
 
         if role == TokenRole.SERVICE.value:
             return TokenData(
@@ -27,14 +22,12 @@ def decode_access_token(token: str) -> Optional[TokenData]:
                 role=TokenRole.SERVICE
             )
 
+        user_id=payload.get("sub")
+        email=payload.get("email")
         if user_id is None or email is None:
             return None
 
-        return TokenData(
-            user_id=int(user_id),
-            email=email,
-            role=TokenRole(role)
-        )
+        return TokenData(user_id=int(user_id), email=email, role=TokenRole(role))
 
     except JWTError:
         return None

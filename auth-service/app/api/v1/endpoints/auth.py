@@ -10,9 +10,59 @@ from ....core.config import settings
 from ....crud.user import auth_crud
 from ....schemas.user import UserCreate, UserResponse, UserLogin, Token, UserUpdate, TokenData
 from ....models.user import UserRole, UserStatus
-
+from pydantic import BaseModel
 
 router=APIRouter()
+
+class ServiceTokenRequest(BaseModel):
+    service_name: str
+    service_secret: str
+
+
+@router.post("/internal/token")
+async def get_service_token(req: ServiceTokenRequest):
+    # Проверка секрета конкретного сервиса
+    if req.service_name == "notification-service":
+        if req.service_secret != settings.SERVICE_SECRET_NOTIFICATION:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid service secret")
+    elif req.service_name == "task-service":
+        if req.service_secret != settings.SERVICE_SECRET_TASK:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid service secret")
+    else:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unknown service")
+    # Создание JWT для сервисов
+    token=create_access_token(
+        data={
+            "sub": req.service_name,
+            "role": "service"
+        },
+        expires_delta=None
+        # Срок жизни токена
+    )
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": 3600}
+
+
+@router.get("/internal/users/{user_id}")
+async def get_user_internal(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    service: TokenData = Depends(get_current_service)
+):
+    user = await auth_crud.get_by_id(db, user_id)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with id={user_id} not found"
+        )
+
+    return {
+        "id": user.id,
+        "email": user.email
+    }
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -66,40 +116,6 @@ async def login(user_in: UserLogin, db: AsyncSession=Depends(get_db)):
         "access_token": access_token,
         "token_type": "bearer",
         "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
-    }
-
-
-@router.post("/internal/token")
-async def get_service_token():
-    token=create_access_token(
-        data={
-            "sub": "notification-service",
-            "role": "service"
-        }
-    )
-    return {
-        "access_token": token,
-        "expires_in": 3600
-    }
-
-
-@router.get("/internal/users/{user_id}")
-async def get_user_internal(
-    user_id: int,
-    db: AsyncSession = Depends(get_db),
-    service: TokenData = Depends(get_current_service)
-):
-    user = await auth_crud.get_by_id(db, user_id)
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with id={user_id} not found"
-        )
-
-    return {
-        "id": user.id,
-        "email": user.email
     }
 
 

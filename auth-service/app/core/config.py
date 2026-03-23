@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
 
+    SERVICE_SECRET_NOTIFICATION: str
+    SERVICE_SECRET_TASK: str
+
     DEBUG: bool=True
     PROJECT_NAME: str="Auth Service"
     VERSION: str = "1.0.0"

@@ -38,12 +38,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 def decode_access_token(token: str) -> Optional[TokenData]:
     try:
         payload=jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id: int = payload.get("sub")
-        email: str = payload.get("email")
-        role: str = payload.get("role")
-
-        if role is None:
-            return None
+        role = payload.get("role")
 
         if role == TokenRole.SERVICE.value:
             return TokenData(
@@ -52,30 +47,37 @@ def decode_access_token(token: str) -> Optional[TokenData]:
                 role=TokenRole.SERVICE
             )
 
+        user_id=payload.get("sub")
+        email=payload.get("email")
         if user_id is None or email is None:
             return None
 
-        return TokenData(
-            user_id=int(user_id),
-            email=email,
-            role=TokenRole(role)
-        )
+        return TokenData(user_id=int(user_id), email=email, role=TokenRole(role))
 
     except JWTError:
         return None
 
 
-def get_current_user_data(token: str=Depends(oauth2_scheme)) -> TokenData:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"}
-    )
+def create_service_token(service_name: str, secret: str) -> str |None:
+    #Проверка секрета
+    expected_secret=getattr(settings, f"SERVICE_{service_name.upper()}_SECRET")
+    if expected_secret is None or expected_secret!=secret:
+        return None
 
+    expire=datetime.now(timezone.utc) + timedelta(minutes=60)
+    payload={
+        "sub": service_name,
+        "role": TokenRole.SERVICE.value,
+        "exp": expire,
+        "iat": datetime.now(timezone.utc)
+    }
+    token=jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return token
+
+def get_current_user_data(token: str=Depends(oauth2_scheme)) -> TokenData:
     token_data=decode_access_token(token)
     if not token_data:
-        raise credentials_exception
-
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
     return token_data
 
 

@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     SENDER_EMAIL: str
     SENDER_PASSWORD: str
 
+    SERVICE_SECRET_NOTIFICATION: str
+
     class Config:
         env_file=".env"
         extra = "ignore"

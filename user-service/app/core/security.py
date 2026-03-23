@@ -5,48 +5,49 @@ from .config import settings
 from pydantic import BaseModel
 from typing import Optional
 # from ..models.user import UserProfile
-from ..schemas.user import TokenData
+from ..schemas.user import TokenData, TokenRole
 
 oauth2_scheme=OAuth2PasswordBearer(tokenUrl="auth/login")
 
 
-def get_current_user_id(token: str=Depends(oauth2_scheme)) -> int:
-    credentials_exception=HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"}
-    )
+def decode_access_token(token: str) -> Optional[TokenData]:
     try:
         payload=jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id: str = payload.get("sub")
+        role = payload.get("role")
 
-        if user_id is None:
-            raise credentials_exception
-        return int(user_id)
+        if role == TokenRole.SERVICE.value:
+            return TokenData(
+                user_id=None,
+                email=None,
+                role=TokenRole.SERVICE
+            )
+
+        user_id=payload.get("sub")
+        email=payload.get("email")
+        if user_id is None or email is None:
+            return None
+
+        return TokenData(user_id=int(user_id), email=email, role=TokenRole(role))
+
     except JWTError:
-        raise credentials_exception
+        return None
 
 
 def get_current_user_data(token: str=Depends(oauth2_scheme)) -> TokenData:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"}
-    )
-    try:
-        payload=jwt.decode(token, settings.SECRET_KEY, algorithms=settings.ALGORITHM)
-        sub = payload.get("sub")
-        email = payload.get("email")
-        role = payload.get("role")
+    token_data=decode_access_token(token)
+    if not token_data:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
+    return token_data
 
-        if role == "service":
-            return TokenData(user_id=None, email=email, role=role)
-        else:
-            if sub is None:
-                raise credentials_exception
-            return TokenData(user_id=int(sub), email=email, role=role)
-    except JWTError:
-        raise credentials_exception
+
+def get_current_user_id(token_data: TokenData=Depends(get_current_user_data)) -> int:
+    if token_data.role == "service":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Service token cannot access user endpoint"
+        )
+
+    return token_data.user_id
 
 
 def get_current_admin(token_data: TokenData=Depends(get_current_user_data)):
@@ -56,6 +57,9 @@ def get_current_admin(token_data: TokenData=Depends(get_current_user_data)):
             detail="Admin access required"
         )
     return token_data
+
+
+
 
 
 def get_current_service(token_data: TokenData = Depends(get_current_user_data)):
