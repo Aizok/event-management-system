@@ -5,7 +5,7 @@ RUN apk add --no-cache curl gcc musl-dev postgresql-dev
 WORKDIR /app
 
 COPY shared/ /app/shared/
-COPY notification-service/ .
+COPY resource-service/ .
 
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir psycopg2-binary

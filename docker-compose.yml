@@ -74,7 +74,7 @@ services:
 
   postgres_resources:
     image: postgres:15-alpine
-    container_name: postgres_resource
+    container_name: postgres_resources
     environment:
       POSTGRES_DB: resources_db
       POSTGRES_USER: resource_user
