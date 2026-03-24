@@ -4,14 +4,11 @@ RUN apk add --no-cache curl gcc musl-dev postgresql-dev
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY shared/ /app/shared/
+COPY event-service/ .
+
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir psycopg2-binary
-
-
-COPY . .
-
-ENV PYTHONPATH=/app
 
 EXPOSE 8002
 

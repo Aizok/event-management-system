@@ -141,7 +141,9 @@ services:
       - app-network
 
   auth-service:
-    build: ./auth-service
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
     container_name: auth_service
     ports:
       - "8001:8001"
@@ -152,8 +154,7 @@ services:
       postgres_auth:
         condition: service_healthy
     volumes:
-      - ./auth-service:/app
-      - /app/__pycache__
+      - ./shared:/app/shared:ro
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8001/health"]
@@ -165,7 +166,9 @@ services:
       - app-network
 
   event-service:
-    build: ./event-service
+    build:
+      context: .
+      dockerfile: event-service/Dockerfile
     container_name: event_service
     ports:
       - "8002:8002"
@@ -176,8 +179,7 @@ services:
       postgres_events:
         condition: service_healthy
     volumes:
-      - ./event-service:/app
-      - /app/__pycache__
+      - ./shared:/app/shared:ro
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8002/health" ]
       interval: 30s
@@ -243,7 +245,9 @@ services:
       - app-network
 
   resource-service:
-    build: ./resource-service
+    build:
+      context: .
+      dockerfile: resource-service/Dockerfile
     container_name: resource_service
     ports:
       - "8005:8005"
@@ -254,8 +258,7 @@ services:
       postgres_resources:
         condition: service_healthy
     volumes:
-      - ./resource-service:/app
-      - /app/__pycache__
+      - ./shared:/app/shared:ro
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8005/health"]
       interval: 30s
