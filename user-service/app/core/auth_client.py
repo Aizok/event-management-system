@@ -1,21 +1,24 @@
 import httpx
 from fastapi import status
 import logging
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
 
 async def get_service_token() -> str:
     async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.post(
-                "http://nginx/api/auth/internal/token"
-            )
-            resp.raise_for_status()
-            return resp.json()["access_token"]
-        except Exception as e:
-            logger.error(f"Error getting service token: {e}")
-            raise
+        resp = await client.post(
+            "http://auth-service:8001/api/auth/internal/token",
+        json={
+                "service_name": "user-service",
+                "service_secret": settings.SERVICE_SECRET_USER
+            }
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        return data["access_token"]
 
 
 

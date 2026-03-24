@@ -9,6 +9,8 @@ class Settings(BaseSettings):
 
     RABBITMQ_URL: str
 
+    SERVICE_SECRET_USER: str
+
     PROJECT_NAME: str="User Service"
     VERSION: str = "1.0.0"
 

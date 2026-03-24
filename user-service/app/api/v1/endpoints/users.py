@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
@@ -14,6 +15,10 @@ from fastapi.security import OAuth2PasswordBearer
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 router=APIRouter()
+
+class ServiceTokenRequest(BaseModel):
+    service_name: str
+    service_secret: str
 
 
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
