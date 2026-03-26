@@ -17,6 +17,8 @@ services:
       retries: 5
     networks:
       - app-network
+    cpus: 0.5
+    mem_limit: 512m
 
   postgres_events:
     image: postgres:15-alpine
@@ -37,6 +39,8 @@ services:
       retries: 5
     networks:
       - app-network
+    cpus: 0.5
+    mem_limit: 512m
 
   postgres_users:
     image: postgres:15-alpine
@@ -54,6 +58,8 @@ services:
       test: [ "CMD-SHELL", "pg_isready -U user_user -d users_db" ]
     networks:
       - app-network
+    cpus: 0.5
+    mem_limit: 512m
 
   postgres_tasks:
     image: postgres:15-alpine
@@ -71,6 +77,8 @@ services:
       test: [ "CMD-SHELL", "pg_isready -U task_user -d tasks_db" ]
     networks:
       - app-network
+    cpus: 0.5
+    mem_limit: 512m
 
   postgres_resources:
     image: postgres:15-alpine
@@ -88,6 +96,8 @@ services:
       test: [ "CMD-SHELL", "pg_isready -U resource_user -d resources_db" ]
     networks:
       - app-network
+    cpus: 0.5
+    mem_limit: 512m
 
   postgres_notifications:
     image: postgres:15-alpine
@@ -105,6 +115,8 @@ services:
       test: [ "CMD-SHELL", "pg_isready -U notif_user -d notif_db" ]
     networks:
       - app-network
+    cpus: 0.5
+    mem_limit: 512m
 
   redis_cache:
     image: redis:7-alpine
@@ -120,6 +132,8 @@ services:
       retries: 5
     networks:
       - app-network
+    cpus: 0.5
+    mem_limit: 512m
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
@@ -139,6 +153,8 @@ services:
       retries: 3
     networks:
       - app-network
+    cpus: 0.5
+    mem_limit: 512m
 
   auth-service:
     build:
@@ -164,6 +180,8 @@ services:
       start_period: 60s
     networks:
       - app-network
+    cpus: 0.5
+    mem_limit: 512m
 
   event-service:
     build:
@@ -189,6 +207,8 @@ services:
     restart: unless-stopped
     networks:
       - app-network
+    cpus: 0.5
+    mem_limit: 512m
 
   user-service:
     build:
@@ -216,6 +236,8 @@ services:
     restart: unless-stopped
     networks:
       - app-network
+    cpus: 0.5
+    mem_limit: 512m
 
   task-service:
     build:
@@ -243,6 +265,8 @@ services:
     restart: unless-stopped
     networks:
       - app-network
+    cpus: 0.5
+    mem_limit: 512m
 
   resource-service:
     build:
@@ -268,6 +292,8 @@ services:
     restart: unless-stopped
     networks:
       - app-network
+    cpus: 0.5
+    mem_limit: 512m
 
   notification-service:
     build:
@@ -295,6 +321,8 @@ services:
     restart: unless-stopped
     networks:
       - app-network
+    cpus: 0.5
+    mem_limit: 512m
 
   nginx:
     image: nginx:alpine
