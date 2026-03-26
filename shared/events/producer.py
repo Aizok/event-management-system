@@ -1,3 +1,5 @@
+import asyncio
+
 import aio_pika
 from typing import Optional
 from .schemas.events import BaseEvent
@@ -21,10 +23,30 @@ class EventProducer:
         self.channel=None
 
     async def connect(self):
-        self.connection=await aio_pika.connect_robust(self.rabbitmq_url )
-        self.channel=await self.connection.channel()
-        await self.channel.set_qos(prefetch_count=1)
-        print(f"Подключён к {self.rabbitmq_url }")
+        if self.connection and not self.connection.is_closed:
+            return
+
+        retries=10
+        delay=5
+
+        for attempt in range(retries):
+            try:
+                print(f"Connecting to RabbitMQ (attempt {attempt+1})")
+
+                self.connection=await aio_pika.connect_robust(self.rabbitmq_url )
+                self.channel=await self.connection.channel()
+
+                print(f"Connected to RabbitMQ, {self.rabbitmq_url }")
+                return
+
+            except Exception as e:
+                print(f"RabbitMQ connection failed: {e}")
+
+                if attempt==retries-1:
+                    raise
+
+                await asyncio.sleep(delay)
+
 
     async def publish(self, event: BaseEvent, exchange_name: str="events"):
         """Отправка события"""

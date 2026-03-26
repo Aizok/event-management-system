@@ -4,11 +4,13 @@ from .api.v1.endpoints import tasks
 from .core.config import settings
 from .core.events import producer
 import logging
+
 logging.basicConfig(level=logging.INFO)
+logger=logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print(f"{settings.PROJECT_NAME} starting")
+    logger.info(f"{settings.PROJECT_NAME} starting")
     await producer.connect()
     yield
     print("Service stopped")
