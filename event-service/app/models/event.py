@@ -3,7 +3,7 @@ import enum
 
 from sqlalchemy import String, Text, DateTime, Float, Enum as SAEnum
 from sqlalchemy.sql import func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 
@@ -33,3 +33,9 @@ class Event(Base):
 
     created_at=mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at=mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    participants: Mapped[list["EventParticipant"]]=relationship(
+        "EventParticipant",
+        back_populates="event",
+        cascade="all, delete-orphan"
+    )

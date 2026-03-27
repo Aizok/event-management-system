@@ -1,7 +1,6 @@
 from sqlalchemy import String, Text, DateTime, Float, Enum as SAEnum, ForeignKey, Integer
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
 from .base import Base
 
 import enum
@@ -37,3 +36,17 @@ class Task(Base):
     event_id: Mapped[int]=mapped_column(Integer, nullable=True, index=True)
     owner_id: Mapped[int]=mapped_column(Integer, nullable=False, index=True)
     assignee_id: Mapped[int | None]=mapped_column(Integer, nullable=True, index=True)
+
+    dependencies: Mapped[list["TaskDependency"]]=relationship(
+        "TaskDependency",
+        foreign_keys="TaskDependency.task_id",
+        back_populates="task",
+        cascade="all, delete-orphan"
+    )
+
+    dependents: Mapped[list["TaskDependency"]]=relationship(
+        "TaskDependency",
+        foreign_keys="TaskDependency.depends_on_task_id",
+        back_populates="depends_on",
+        cascade="all, delete-orphan"
+    )

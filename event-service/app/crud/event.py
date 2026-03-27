@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from ..models.event import Event
 from ..schemas.event import EventCreate, EventUpdate
+from .event_participant import event_participant_crud, ParticipantRole
 
 class EventCRUD:
     async def create(self, db: AsyncSession, obj_in: EventCreate, owner_id: int) -> Event:
@@ -13,7 +14,14 @@ class EventCRUD:
         db.add(db_obj)
         await db.commit()
         await db.refresh(db_obj)
+
+        await event_participant_crud.add_participant(
+            db,
+            event_id=db_obj.id,
+            user_id=owner_id,
+            role=ParticipantRole.OWNER)
         return db_obj
+
 
     async def get(self, db: AsyncSession, event_id: int, owner_id: Optional[int]=None) -> Optional[Event]:
         query = select(Event).where(Event.id == event_id)
