@@ -30,6 +30,7 @@ class EventCRUD:
         result=await db.execute(query)
         return result.scalar_one_or_none()
 
+
     async def get_multi(self, db: AsyncSession, skip: int=0, limit: int=100, owner_id: Optional[int] = None) -> List[Event]:
         query=select(Event).offset(skip).limit(limit).order_by(Event.created_at.desc())
         if owner_id:

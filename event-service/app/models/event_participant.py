@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Enum as SAEnum, Integer
+from sqlalchemy import ForeignKey, Enum as SAEnum, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base
 import enum
@@ -22,4 +22,8 @@ class EventParticipant(Base):
     event: Mapped["Event"] = relationship(
         "Event",
         back_populates="participants"
+    )
+
+    __table_args__ = (
+        UniqueConstraint("event_id", "user_id", name="uq_event_user")
     )

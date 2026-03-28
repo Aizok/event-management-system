@@ -1,8 +1,9 @@
 from sqlalchemy import select, func, update, delete, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
+from fastapi import HTTPException, status
 from typing import List, Optional
 from ..models.event_participant import EventParticipant, ParticipantRole
-from ..schemas.event import EventCreate, EventUpdate
 
 class EventParticipantCRUD:
     async def create_participant(self, db: AsyncSession, event_id: int, user_id: int, role: ParticipantRole) ->EventParticipant:
@@ -12,7 +13,15 @@ class EventParticipantCRUD:
             role=role
         )
         db.add(db_obj)
-        await db.commit()
+        # Это дополнительный блок защиты от дублирования юзера, чтобы один запрос не упал с IntegrityError
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User already participant"
+            )
         await db.refresh(db_obj)
         return db_obj
 
@@ -22,7 +31,10 @@ class EventParticipantCRUD:
             event_id: int,
             user_id: int
     ) -> Optional[EventParticipant]:
-        query = select(EventParticipant).where(EventParticipant.event_id == event_id, EventParticipant.user_id == user_id)
+        query = select(EventParticipant).where(
+            EventParticipant.event_id == event_id,
+            EventParticipant.user_id == user_id
+        )
         result = await db.execute(query)
         return result.scalar_one_or_none()
 
