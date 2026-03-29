@@ -1,4 +1,4 @@
-from sqlalchemy import String, Text, DateTime, Float, Enum as SAEnum, ForeignKey, Integer
+from sqlalchemy import String, Text, DateTime, Float, Enum as SAEnum, ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base
@@ -31,4 +31,8 @@ class TaskDependency(Base):
         "Task",
         foreign_keys=[depends_on_task_id],
         back_populates="dependents"
+    )
+
+    __table_args__ = (
+        UniqueConstraint("task_id", "depends_on_task_id", name="uq_task_dependency"),
     )
