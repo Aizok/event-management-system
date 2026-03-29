@@ -6,10 +6,10 @@ from ....core.security import get_current_user_id
 from ....crud.event_participant import event_participant_crud
 from ....crud.event import event_crud
 from ....schemas.event_participant import EventParticipantCreate, EventParticipantResponse
-from ....models.event_participant import ParticipantRole
+from ....models.event_participant import ParticipantRole, EventParticipant
 from ....models.event import Event
 from ....api.dependencies.event import get_event_or_404
-from ....api.dependencies.participant import get_current_participant
+from ....api.dependencies.participant import get_current_participant, get_current_owner
 
 router = APIRouter()
 
@@ -17,12 +17,8 @@ router = APIRouter()
 async def create_participant(
         participant_in: EventParticipantCreate,
         db: AsyncSession=Depends(get_db),
-        current=Depends(get_current_participant)
+        current: EventParticipant=Depends(get_current_owner)
 ):
-    if current.role != ParticipantRole.OWNER:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can add participants")
-
-
     # Нельзя добавить второго owner
     if participant_in.role == ParticipantRole.OWNER:
         raise HTTPException(
@@ -40,19 +36,24 @@ async def create_participant(
             detail="User already participant"
         )
 
-    return await event_participant_crud.create_participant(
-        db,
-        event_id=current.event_id,
-        user_id=participant_in.user_id,
-        role=participant_in.role
-    )
+    try:
+        return await event_participant_crud.create_participant(
+            db,
+            event_id=current.event_id,
+            user_id=participant_in.user_id,
+            role=participant_in.role
+        )
+    except ValueError as e:
+        if str(e) == "duplicate_participant":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Duplicate participant")
+        raise
 
 
 @router.get("/{event_id}/participants/{participant_user_id}", response_model=EventParticipantResponse)
 async def get_participant(
         participant_user_id: int,
         db: AsyncSession = Depends(get_db),
-        current=Depends(get_current_participant)
+        current:EventParticipant=Depends(get_current_participant)
 ):
     participant = await event_participant_crud.get_participant(db, current.event_id, participant_user_id)
     if not participant:
@@ -67,7 +68,7 @@ async def get_participant(
 @router.get("/{event_id}/participants", response_model=List[EventParticipantResponse])
 async def get_participants(
         db: AsyncSession=Depends(get_db),
-        current=Depends(get_current_participant)
+        current:EventParticipant=Depends(get_current_participant)
 ):
     return await event_participant_crud.get_participants_by_event(db, current.event_id)
 
@@ -76,11 +77,8 @@ async def get_participants(
 async def delete_participant(
         participant_user_id: int,
         db: AsyncSession = Depends(get_db),
-        current=Depends(get_current_participant)
+        current:EventParticipant=Depends(get_current_owner)
 ):
-    if current.role != ParticipantRole.OWNER:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can remove participants")
-
     if participant_user_id == current.user_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

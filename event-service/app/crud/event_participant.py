@@ -18,10 +18,7 @@ class EventParticipantCRUD:
             await db.commit()
         except IntegrityError:
             await db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User already participant"
-            )
+            raise ValueError("duplicate_participant")
         await db.refresh(db_obj)
         return db_obj
 
