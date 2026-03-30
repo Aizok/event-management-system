@@ -43,6 +43,21 @@ class TaskDependencyCRUD:
         return [row[0] for row in result.all()]
 
 
+    async def delete(
+            self,
+            db: AsyncSession,
+            task_id: int,
+            depends_on_task_id: int
+    ) -> bool:
+        query=delete(TaskDependency).where(
+            TaskDependency.task_id==task_id,
+            TaskDependency.depends_on_task_id==depends_on_task_id
+        )
+        result=await db.execute(query)
+        await db.commit()
+
+        return result.rowcount > 0
+
     async def has_cycle(
             self,
             db: AsyncSession,

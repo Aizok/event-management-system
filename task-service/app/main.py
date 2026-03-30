@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from .api.v1.endpoints import tasks
+from .api.v1.endpoints import task_dependencies
 from .core.config import settings
 from .core.events import producer
 import logging
@@ -24,6 +25,7 @@ app=FastAPI(
 )
 
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
+app.include_router(task_dependencies.router, prefix="/api/tasks", tags=["task-dependencies"])
 
 @app.get("/health")
 async def health_check():
