@@ -56,7 +56,7 @@ async def update_resource(
 ):
     resource=await resource_crud.update_resource(db, resource_id, resource_in, user_id)
     if not resource:
-        raise HTTPException(status_code=404, detail="Resource not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
     return resource
 
 
