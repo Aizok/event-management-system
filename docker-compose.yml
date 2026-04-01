@@ -171,6 +171,7 @@ services:
         condition: service_healthy
     volumes:
       - ./shared:/app/shared:ro
+      - ./auth-service:/app
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8001/health"]
@@ -198,6 +199,7 @@ services:
         condition: service_healthy
     volumes:
       - ./shared:/app/shared:ro
+      - ./event-service:/app
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8002/health" ]
       interval: 30s
@@ -227,6 +229,7 @@ services:
         condition: service_healthy
     volumes:
       - ./shared:/app/shared:ro
+      - ./user-service:/app
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8003/health" ]
       interval: 30s
@@ -256,6 +259,7 @@ services:
         condition: service_healthy
     volumes:
       - ./shared:/app/shared:ro
+      - ./task-service:/app
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8004/health"]
       interval: 30s
@@ -283,6 +287,7 @@ services:
         condition: service_healthy
     volumes:
       - ./shared:/app/shared:ro
+      - ./resource-service:/app
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8005/health"]
       interval: 30s
@@ -312,6 +317,7 @@ services:
         condition: service_healthy
     volumes:
       - ./shared:/app/shared:ro
+      - ./notification-service:/app
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8006/health" ]
       interval: 30s

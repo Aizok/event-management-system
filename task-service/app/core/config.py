@@ -9,6 +9,8 @@ class Settings(BaseSettings):
 
     RABBITMQ_URL: str
 
+    SERVICE_SECRET_TASK: str
+
     PROJECT_NAME: str="Task Service"
     VERSION: str="1.0.0"
 
