@@ -7,7 +7,10 @@ from ....core.security import get_current_user_id
 from ....crud.task import task_crud
 from ....schemas.task import TaskCreate, TaskUpdate, TaskResponse
 from ....core.events import publish_task_created, publish_task_updated
-
+from ....core.permissions import check_task_permissions, ALLOWED_ROLES
+from ....core.event_client import get_user_role_in_event
+from ....core.auth_client import is_admin
+from ....core.event_client import get_user_events_with_roles
 
 router = APIRouter()
 
@@ -32,8 +35,20 @@ async def read_tasks(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    tasks=await task_crud.get_multi(db, skip=skip, limit=limit, owner_id=user_id)
-    return tasks
+    if await is_admin(user_id):
+        return await task_crud.get_multi(db, skip, limit)
+
+    event_ids=await get_user_events_with_roles(user_id)
+    if not event_ids:
+        return []
+
+    return await task_crud.get_by_event_ids(
+        db,
+        event_ids,
+        skip,
+        limit
+    )
+
 
 @router.get("/{task_id}", response_model=TaskResponse)
 async def read_task(
@@ -41,10 +56,12 @@ async def read_task(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    task = await task_crud.get(db, task_id, user_id)
+    task = await task_crud.get(db, task_id)
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    await check_task_permissions(task, user_id)
     return task
+
 
 @router.get("/event/{event_id}", response_model=List[TaskResponse])
 async def read_tasks_by_event(
@@ -52,8 +69,10 @@ async def read_tasks_by_event(
         db: AsyncSession=Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    task_by_event=await task_crud.get_by_event(db, event_id, user_id)
-    return task_by_event
+    tasks=await task_crud.get_by_event(db, event_id)
+    for task in tasks:
+        await check_task_permissions(task, user_id)
+    return tasks
 
 
 @router.put("/{task_id}", response_model=TaskResponse)
@@ -63,13 +82,15 @@ async def update_task(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    old_task=await task_crud.get(db, task_id, owner_id=user_id)
+    old_task=await task_crud.get(db, task_id)
     if not old_task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
+    await check_task_permissions(old_task, user_id)
+
     previous_status=old_task.status
 
-    task=await task_crud.update(db=db, task_id=task_id, obj_in=task_in, owner_id=user_id)
+    task=await task_crud.update(db=db, task_id=task_id, obj_in=task_in)
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
@@ -77,7 +98,7 @@ async def update_task(
     changes=task_in.model_dump(exclude_unset=True)
     changes['previous_status']=previous_status
 
-    """Отправка события TaskCreated"""
+    """Отправка события TaskUpdated"""
     await publish_task_updated(db, task.id, changes)
 
     return task
@@ -85,6 +106,11 @@ async def update_task(
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)  
 async def delete_task(task_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)):
-    success = await task_crud.delete(db, task_id, user_id)
+    task = await task_crud.get(db, task_id)
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    await check_task_permissions(task, user_id)
+    success = await task_crud.delete(db, task_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")

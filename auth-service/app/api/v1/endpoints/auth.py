@@ -64,7 +64,8 @@ async def get_user_internal(
 
     return {
         "id": user.id,
-        "email": user.email
+        "email": user.email,
+        "role": user.role
     }
 
 

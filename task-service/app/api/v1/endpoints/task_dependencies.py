@@ -6,6 +6,8 @@ from ....core.security import get_current_user_id
 from ....crud.task_dependency import task_dependency_crud
 from ....crud.task import task_crud
 from ....schemas.task_dependency import TaskDependencyResponse, TaskDependencyListResponse
+from ....core.permissions import check_task_permissions
+
 
 router = APIRouter()
 
@@ -16,13 +18,21 @@ async def create_dependency(
         db: AsyncSession=Depends(get_db),
         user_id: int=Depends(get_current_user_id)
 ):
-    task=await task_crud.get(db, task_id, user_id)
-    depends_on=await task_crud.get(db, depends_on_task_id, user_id)
+    task=await task_crud.get(db, task_id)
+    depends_on=await task_crud.get(db, depends_on_task_id)
 
     if not task or not depends_on:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
+        )
+    await check_task_permissions(task, user_id)
+    await check_task_permissions(depends_on, user_id)
+
+    if task.event_id != depends_on.event_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tasks must belong to same event"
         )
     try:
         dependency=await task_dependency_crud.create(
@@ -49,18 +59,20 @@ async def create_dependency(
                 detail="Dependency already exists"
             )
 
+
 @router.get("/{task_id}/dependencies", response_model=List[TaskDependencyResponse])
 async def get_dependencies(
         task_id: int,
         db: AsyncSession=Depends(get_db),
         user_id: int=Depends(get_current_user_id)
 ):
-    task=await task_crud.get(db, task_id, user_id)
+    task=await task_crud.get(db, task_id)
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
+    await check_task_permissions(task, user_id)
 
     deps=await task_dependency_crud.get_dependencies(db, task_id)
     return deps
@@ -72,12 +84,13 @@ async def get_dependency_ids(
         db: AsyncSession=Depends(get_db),
         user_id: int=Depends(get_current_user_id)
 ):
-    task=await task_crud.get(db, task_id, user_id)
+    task=await task_crud.get(db, task_id)
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
+    await check_task_permissions(task, user_id)
 
     deps=await task_dependency_crud.get_dependency_ids(db, task_id)
     return TaskDependencyListResponse(task_id=task_id, depends_on=deps)
@@ -90,13 +103,13 @@ async def delete_dependency(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    task=await task_crud.get(db, task_id, user_id)
+    task=await task_crud.get(db, task_id)
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
-
+    await check_task_permissions(task, user_id)
     success=await task_dependency_crud.delete(db, task_id, depends_on_task_id)
     if not success:
         raise HTTPException(

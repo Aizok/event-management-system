@@ -3,11 +3,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from ....core.database import get_db
-from ....core.security import get_current_user_id
+from ....core.security import get_current_user_id, get_current_service
 from ....crud.event import event_crud
-from ....schemas.event import EventCreate, EventUpdate, EventResponse
+from ....schemas.event import EventCreate, EventUpdate, EventResponse, TokenData
 
 router = APIRouter()
+
+
+@router.get("/internal/users/{user_id}/events")
+async def get_user_events(
+        user_id: int,
+        db: AsyncSession = Depends(get_db),
+        service: TokenData = Depends(get_current_service)
+):
+    events=await event_crud.get_user_events_with_roles(db, user_id)
+    return {"events": events}
+
 
 @router.post("/", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
 async def create_event(event_in: EventCreate, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)):

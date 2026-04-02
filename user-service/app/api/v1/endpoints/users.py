@@ -56,7 +56,7 @@ async def read_user_profiles(
 async def get_user_internal(
         user_id: int,
         db: AsyncSession=Depends(get_db),
-        service: TokenData=Depends(get_current_service)
+        service: TokenData = Depends(get_current_service)
 ):
     import logging
     logging.basicConfig(level=logging.INFO)

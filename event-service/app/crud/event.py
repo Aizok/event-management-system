@@ -2,6 +2,7 @@ from sqlalchemy import select, func, update, delete, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from ..models.event import Event
+from ..models.event_participant import EventParticipant
 from ..schemas.event import EventCreate, EventUpdate
 from .event_participant import event_participant_crud, ParticipantRole
 
@@ -29,6 +30,34 @@ class EventCRUD:
             query=query.where(Event.owner_id==owner_id)
         result=await db.execute(query)
         return result.scalar_one_or_none()
+
+
+    async def get_by_user(self, db: AsyncSession, user_id: int) -> List[Event]:
+        query=(
+            select(Event)
+            .join(EventParticipant, Event.id==EventParticipant.event_id)
+            .where(EventParticipant.user_id==user_id)
+            .order_by(Event.created_at.desc())
+        )
+        result=await db.execute(query)
+        return result.scalars().all()
+
+
+    async def get_user_events_with_roles(self, db: AsyncSession, user_id: int):
+        query = (
+            select(Event.id, EventParticipant.role)
+            .join(EventParticipant, Event.id == EventParticipant.event_id)
+            .where(EventParticipant.user_id == user_id)
+            .order_by(Event.created_at.desc())
+        )
+        result = await db.execute(query)
+        return [
+            {
+                "event_id": row[0],
+                "role": row[1].value
+            }
+            for row in result.all()
+        ]
 
 
     async def get_multi(self, db: AsyncSession, skip: int=0, limit: int=100, owner_id: Optional[int] = None) -> List[Event]:
