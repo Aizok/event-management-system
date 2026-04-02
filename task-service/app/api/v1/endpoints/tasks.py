@@ -38,13 +38,16 @@ async def read_tasks(
     if await is_admin(user_id):
         return await task_crud.get_multi(db, skip, limit)
 
-    event_ids=await get_user_events_with_roles(user_id)
-    if not event_ids:
-        return []
+    events=await get_user_events_with_roles(user_id)
+    allowed_event_ids = [
+        e["event_id"]
+        for e in events
+        if e["role"] in ALLOWED_ROLES
+    ]
 
     return await task_crud.get_by_event_ids(
         db,
-        event_ids,
+        allowed_event_ids,
         skip,
         limit
     )
