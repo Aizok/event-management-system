@@ -24,12 +24,22 @@ class EventCRUD:
         return db_obj
 
 
-    async def get(self, db: AsyncSession, event_id: int, owner_id: Optional[int]=None) -> Optional[Event]:
+    async def get(self, db: AsyncSession, event_id: int) -> Optional[Event]:
         query = select(Event).where(Event.id == event_id)
-        if owner_id is not None:
-            query=query.where(Event.owner_id==owner_id)
         result=await db.execute(query)
         return result.scalar_one_or_none()
+
+
+    async def get_by_event_ids(self, db: AsyncSession, event_ids, skip: int=0, limit:int=100):
+        query = (
+            select(Event)
+            .where(Event.id.in_(event_ids))
+            .order_by(Event.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        result = await db.execute(query)
+        return result.scalars().all()
 
 
     async def get_by_user(self, db: AsyncSession, user_id: int) -> List[Event]:
@@ -60,17 +70,15 @@ class EventCRUD:
         ]
 
 
-    async def get_multi(self, db: AsyncSession, skip: int=0, limit: int=100, owner_id: Optional[int] = None) -> List[Event]:
+    async def get_multi(self, db: AsyncSession, skip: int=0, limit: int=100) -> List[Event]:
         query=select(Event)
-        if owner_id is not None:
-            query=query.where(Event.owner_id == owner_id)
         query=query.order_by(Event.created_at.desc()).offset(skip).limit(limit)
         result=await db.execute(query)
         return result.scalars().all()
 
 
-    async def update(self, db: AsyncSession, event_id: int, obj_in: EventUpdate, owner_id: int) -> Optional[Event]:
-        db_obj=await self.get(db, event_id, owner_id)
+    async def update(self, db: AsyncSession, event_id: int, obj_in: EventUpdate) -> Optional[Event]:
+        db_obj=await self.get(db, event_id)
         if not db_obj:
             return None
 

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     SERVICE_SECRET_NOTIFICATION: str
     SERVICE_SECRET_TASK: str
     SERVICE_SECRET_USER: str
+    SERVICE_SECRET_EVENT: str
 
     DEBUG: bool=True
     PROJECT_NAME: str="Auth Service"

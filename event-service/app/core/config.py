@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str="Event Service"
     VERSION: str="1.0.0"
 
+    SERVICE_SECRET_EVENT: str
+
     class Config:
         env_file=".env"
         extra = "ignore"
