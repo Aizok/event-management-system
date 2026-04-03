@@ -1,16 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession 
 from typing import List
-
 from ....core.database import get_db
 from ....core.security import get_current_user_id
 from ....crud.task import task_crud
 from ....schemas.task import TaskCreate, TaskUpdate, TaskResponse
 from ....core.events import publish_task_created, publish_task_updated
 from ....core.permissions import check_task_permissions, ALLOWED_ROLES
-from ....core.event_client import get_user_role_in_event
 from ....core.auth_client import is_admin
 from ....core.event_client import get_user_events_with_roles
+from ....core.event_client import get_user_role_in_event
+
 
 router = APIRouter()
 
@@ -20,6 +20,20 @@ async def create_task(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
+    if not await is_admin(user_id):
+        events=await get_user_events_with_roles(user_id)
+
+        roles_map={
+            e["event_id"]: e["role"]
+            for e in events
+        }
+        role=roles_map.get(task_in.event_id)
+        if role not in ALLOWED_ROLES:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions"
+            )
+
     task=await task_crud.create(db=db, obj_in=task_in, owner_id=user_id)
 
     """Отправка события TaskCreated"""
@@ -45,6 +59,8 @@ async def read_tasks(
         if e["role"] in ALLOWED_ROLES
     ]
 
+    if not allowed_event_ids:
+        return []
     return await task_crud.get_by_event_ids(
         db,
         allowed_event_ids,
@@ -73,8 +89,21 @@ async def read_tasks_by_event(
         user_id: int = Depends(get_current_user_id)
 ):
     tasks=await task_crud.get_by_event(db, event_id)
-    for task in tasks:
-        await check_task_permissions(task, user_id)
+    if await is_admin(user_id):
+        return tasks
+
+    events=await get_user_events_with_roles(user_id)
+
+    roles_map = {
+        e["event_id"]: e["role"]
+        for e in events
+    }
+    role = roles_map.get(event_id)
+    if role not in ALLOWED_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
     return tasks
 
 

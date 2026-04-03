@@ -25,10 +25,12 @@ async def create_event(event_in: EventCreate, db: AsyncSession = Depends(get_db)
     event=await event_crud.create(db=db, obj_in=event_in, owner_id=user_id)
     return event
 
+
 @router.get("/", response_model=List[EventResponse])
 async def read_events(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)):
     events=await event_crud.get_multi(db, skip=skip, limit=limit, owner_id=user_id)
     return events
+
 
 @router.get("/{event_id}", response_model=EventResponse)
 async def read_event(event_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)):
@@ -37,12 +39,14 @@ async def read_event(event_id: int, db: AsyncSession = Depends(get_db), user_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
     return event
 
+
 @router.put("/{event_id}", response_model=EventResponse)
 async def update_event(event_id: int, event_in: EventUpdate, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)):
     event=await event_crud.update(db=db, event_id=event_id, obj_in=event_in, owner_id=user_id)
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
     return event
+
 
 @router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_event(event_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)):

@@ -1,7 +1,7 @@
 import httpx
-from typing import Optional, List
+from typing import Optional, List, Dict
 from .config import settings
-from fastapi import status
+from fastapi import status, HTTPException
 from .auth_client import get_service_token
 
 
@@ -29,10 +29,13 @@ async def get_user_role_in_event(event_id: int, user_id: int)-> Optional[str]:
 
         except Exception as e:
             logger.error(f"Error fetching role: {e}")
-            return None
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="event-service unavailable"
+            )
 
 
-async def get_user_events_with_roles(user_id: int) -> List[int] | None:
+async def get_user_events_with_roles(user_id: int) -> List[Dict]:
     async with httpx.AsyncClient() as client:
         try:
             token=await get_service_token()
@@ -45,5 +48,8 @@ async def get_user_events_with_roles(user_id: int) -> List[int] | None:
             return resp.json()["events"]
         except Exception as e:
             logger.error(f"Error fetching user events: {e}")
-            return []
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="event-service unavailable"
+            )
 

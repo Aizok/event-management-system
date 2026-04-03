@@ -26,7 +26,7 @@ class EventCRUD:
 
     async def get(self, db: AsyncSession, event_id: int, owner_id: Optional[int]=None) -> Optional[Event]:
         query = select(Event).where(Event.id == event_id)
-        if owner_id:
+        if owner_id is not None:
             query=query.where(Event.owner_id==owner_id)
         result=await db.execute(query)
         return result.scalar_one_or_none()
@@ -61,9 +61,10 @@ class EventCRUD:
 
 
     async def get_multi(self, db: AsyncSession, skip: int=0, limit: int=100, owner_id: Optional[int] = None) -> List[Event]:
-        query=select(Event).offset(skip).limit(limit).order_by(Event.created_at.desc())
-        if owner_id:
+        query=select(Event)
+        if owner_id is not None:
             query=query.where(Event.owner_id == owner_id)
+        query=query.order_by(Event.created_at.desc()).offset(skip).limit(limit)
         result=await db.execute(query)
         return result.scalars().all()
 
@@ -84,7 +85,7 @@ class EventCRUD:
 
     async def delete(self, db: AsyncSession, event_id: int, owner_id: Optional[int]=None) -> bool:
         query=delete(Event).where(Event.id==event_id)
-        if owner_id:
+        if owner_id is not None:
             query=query.where(Event.owner_id==owner_id)
         result=await db.execute(query)
         await db.commit()

@@ -30,13 +30,19 @@ class TaskCRUD:
 
 
     async def get_by_event(self, db: AsyncSession, event_id: int) -> List[Task]:
-        query=select(Task).where(Task.event_id==event_id)
+        query=select(Task).where(Task.event_id==event_id).order_by(desc(Task.created_at))
         result=await db.execute(query)
         return result.scalars().all()
 
 
     async def get_by_event_ids(self, db: AsyncSession, event_ids: List[int] ,skip: int=0, limit: int=100):
-        query = select(Task).where(Task.event_id.in_(event_ids)).offset(skip).limit(limit)
+        query = (
+            select(Task)
+            .where(Task.event_id.in_(event_ids))
+            .order_by(desc(Task.created_at))
+            .offset(skip)
+            .limit(limit)
+        )
         result=await db.execute(query)
         return result.scalars().all()
 
