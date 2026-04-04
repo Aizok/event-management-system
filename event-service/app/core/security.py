@@ -4,36 +4,45 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from .config import settings
 from ..schemas.event import TokenData, TokenRole
+import logging
+
+logger=logging.getLogger(__name__)
 
 oauth2_scheme=OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def decode_access_token(token: str) -> Optional[TokenData]:
     try:
         payload=jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id: int = payload.get("sub")
-        email: str = payload.get("email")
-        role: str = payload.get("role")
-
-        if role is None:
+        try:
+            role = TokenRole(payload.get("role"))
+        except ValueError:
+            logger.warning("Invalid role in token")
             return None
 
-        if role == TokenRole.SERVICE.value:
+        if role == TokenRole.SERVICE:
+            service_name=payload.get("sub")
+            if not service_name:
+                return None
+
             return TokenData(
+                role=TokenRole.SERVICE,
+                service_name=service_name,
                 user_id=None,
-                email=None,
-                role=TokenRole.SERVICE
+                email=None
             )
 
+        try:
+            user_id=int(payload.get("sub"))
+        except(TypeError, ValueError):
+            return None
+        email=payload.get("email")
         if user_id is None or email is None:
             return None
 
-        return TokenData(
-            user_id=int(user_id),
-            email=email,
-            role=TokenRole(role)
-        )
+        return TokenData(user_id=user_id, email=email, role=role, service_name=None)
 
-    except JWTError:
+    except JWTError as e:
+        logger.warning(f"JWT decode error: {e}")
         return None
 
 

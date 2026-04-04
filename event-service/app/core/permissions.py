@@ -18,7 +18,7 @@ async def check_event_permissions(db, event_id: int, user_id: int):
     )
     role = result.scalar_one_or_none()
 
-    if role is None or role.value not in {"owner", "organizer"}:
+    if role is None or role.value not in ALLOWED_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"

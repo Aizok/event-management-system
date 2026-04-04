@@ -77,6 +77,7 @@ class TokenRole(str, enum.Enum):
 
 
 class TokenData(BaseModel):
+    role: TokenRole
     user_id: int | None = None
     email: str | None = None
-    role: TokenRole
+    service_name: str | None = None
