@@ -9,6 +9,8 @@ from ....schemas.event import EventCreate, EventUpdate, EventResponse, TokenData
 from ....core.permissions import check_event_permissions, ALLOWED_ROLES
 from ....core.auth_client import is_admin
 
+ALLOWED_SERVICES={"task-service"}
+
 router = APIRouter()
 
 
@@ -18,6 +20,12 @@ async def get_user_events(
         db: AsyncSession = Depends(get_db),
         service: TokenData = Depends(get_current_service)
 ):
+    if service.service_name not in ALLOWED_SERVICES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed"
+        )
+
     events=await event_crud.get_user_events_with_roles(db, user_id)
     return {"events": events}
 
