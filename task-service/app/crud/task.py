@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from ..models.task import Task
 from ..schemas.task import TaskCreate, TaskUpdate
-
+from ..crud.task_dependency import task_dependency_crud
 
 class TaskCRUD:
     async def create(self, db: AsyncSession, obj_in: TaskCreate, owner_id: int) -> Task:
@@ -62,9 +62,31 @@ class TaskCRUD:
 
 
     async def delete(self, db: AsyncSession, task_id: int) -> bool:
-        query=delete(Task).where(Task.id==task_id)
-        result=await db.execute(query)
-        await db.commit()
+        async with db.begin():
+            parent_ids=await task_dependency_crud.get_parent_ids(db, task_id)
+            child_ids=await task_dependency_crud.get_child_ids(db, task_id)
+
+            if parent_ids and child_ids:
+                for child_id in child_ids:
+                    for parent_id in parent_ids:
+                        if child_id==parent_id:
+                            continue
+
+                        try:
+                            async with db.begin_nested():
+                                await task_dependency_crud.create(
+                                    db,
+                                    task_id=child_id,
+                                    depends_on_task_id=parent_id,
+                                    commit=False
+                                )
+                        except ValueError:
+                            continue
+
+            query=delete(Task).where(Task.id==task_id)
+            result=await db.execute(query)
+
         return result.rowcount > 0
+
 
 task_crud=TaskCRUD()

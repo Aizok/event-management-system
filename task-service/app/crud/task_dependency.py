@@ -8,7 +8,7 @@ from ..schemas.task import TaskCreate, TaskUpdate
 
 class TaskDependencyCRUD:
 
-    async def create(self, db: AsyncSession, task_id: int, depends_on_task_id: int) -> TaskDependency:
+    async def create(self, db: AsyncSession, task_id: int, depends_on_task_id: int, commit: bool=True) -> TaskDependency:
         if task_id==depends_on_task_id:
             raise ValueError("self_dependency")
         if await self.has_cycle(db, task_id, depends_on_task_id):
@@ -19,13 +19,17 @@ class TaskDependencyCRUD:
             depends_on_task_id=depends_on_task_id
         )
         db.add(db_obj)
+
         try:
-            await db.commit()
+            if commit:
+                await db.commit()
+                await db.refresh(db_obj)
+            else:
+                await db.flush()
+
         except IntegrityError:
-            await db.rollback()
             raise ValueError("duplicate_dependency")
 
-        await db.refresh(db_obj)
         return db_obj
 
 
@@ -92,5 +96,22 @@ class TaskDependencyCRUD:
             to_visit.extend(next_nodes)
 
         return False
+
+
+    async def get_parent_ids(self, db: AsyncSession, task_id: int) ->List[int]:
+        query=select(TaskDependency.depends_on_task_id).where(
+            TaskDependency.task_id == task_id
+        )
+        result=await db.execute(query)
+        return [row[0] for row in result.all()]
+
+
+    async def get_child_ids(self, db: AsyncSession, task_id: int) -> List[int]:
+        query = select(TaskDependency.task_id).where(
+            TaskDependency.depends_on_task_id == task_id
+        )
+        result = await db.execute(query)
+        return [row[0] for row in result.all()]
+
 
 task_dependency_crud = TaskDependencyCRUD()

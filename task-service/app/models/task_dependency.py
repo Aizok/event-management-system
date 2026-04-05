@@ -9,13 +9,13 @@ class TaskDependency(Base):
 
     id: Mapped[int]=mapped_column(primary_key=True, index=True)
 
-    # Зависимая задача
+    # Зависимая задача, ребёнок
     task_id: Mapped[int]=mapped_column(
         ForeignKey("tasks.id", ondelete="CASCADE"),
         index=True
     )
 
-    # От какой зависит
+    # От какой зависит, родитель
     depends_on_task_id: Mapped[int]=mapped_column(
         ForeignKey("tasks.id", ondelete="CASCADE"),
         index=True
