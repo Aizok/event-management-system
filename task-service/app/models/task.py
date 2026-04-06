@@ -30,8 +30,11 @@ class Task(Base):
     priority:Mapped[TaskPriority]=mapped_column(SAEnum(TaskPriority), default=TaskPriority.MEDIUM, nullable=False)
 
     created_at:Mapped[DateTime]=mapped_column(DateTime(timezone=True), server_default=func.now())
-    deadline:Mapped[DateTime]=mapped_column(DateTime(timezone=True), nullable=True)
     updated_at:Mapped[DateTime]=mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    start_time: Mapped[DateTime]=mapped_column(DateTime(timezone=True), nullable=False)
+    end_time: Mapped[DateTime]=mapped_column(DateTime(timezone=True), nullable=False)
+    deadline:Mapped[DateTime]=mapped_column(DateTime(timezone=True), nullable=False)
 
     event_id: Mapped[int]=mapped_column(Integer, nullable=True, index=True)
     owner_id: Mapped[int]=mapped_column(Integer, nullable=False, index=True)

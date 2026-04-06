@@ -1,9 +1,10 @@
 from sqlalchemy import select, func, update, delete, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
-from ..models.task import Task
+from ..models.task import Task, TaskStatus
 from ..schemas.task import TaskCreate, TaskUpdate
 from ..crud.task_dependency import task_dependency_crud
+from datetime import datetime, timezone
 
 class TaskCRUD:
     async def create(self, db: AsyncSession, obj_in: TaskCreate, owner_id: int) -> Task:
@@ -87,6 +88,22 @@ class TaskCRUD:
             result=await db.execute(query)
 
         return result.rowcount > 0
+
+
+    async def update_overdue_tasks(self, db: AsyncSession):
+        now=datetime.now(timezone.utc)
+
+        query=(
+            update(Task)
+            .where(
+                Task.deadline < now,
+                Task.status != TaskStatus.DONE
+            )
+            .values(status=TaskStatus.OVERDUE)
+        )
+
+        await db.execute(query)
+        await db.commit()
 
 
 task_crud=TaskCRUD()
