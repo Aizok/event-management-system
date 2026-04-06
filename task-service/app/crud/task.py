@@ -4,7 +4,7 @@ from typing import List, Optional
 from ..models.task import Task, TaskStatus
 from ..schemas.task import TaskCreate, TaskUpdate
 from ..crud.task_dependency import task_dependency_crud
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 class TaskCRUD:
     async def create(self, db: AsyncSession, obj_in: TaskCreate, owner_id: int) -> Task:
@@ -104,6 +104,30 @@ class TaskCRUD:
 
         await db.execute(query)
         await db.commit()
+
+
+    async def recalculate_schedule(self, db: AsyncSession, task_id: int):
+        task=await self.get(db, task_id)
+        if not task:
+            return
+
+        children_ids=await task_dependency_crud.get_child_ids(db, task_id)
+
+        for child_id in children_ids:
+            child=await self.get(db, child_id)
+            if not child:
+                continue
+
+            if child.start_time and child.start_time < task.end_time:
+                delta=task.end_time - child.start_time
+
+                child.start_time+=delta
+                child.end_time+=delta
+
+                await db.flush()
+
+                # Рекурсивно вниз
+                await self.recalculate_schedule(db, child_id)
 
 
 task_crud=TaskCRUD()
