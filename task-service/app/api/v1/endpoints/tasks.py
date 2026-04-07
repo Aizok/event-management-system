@@ -122,9 +122,12 @@ async def update_task(
 
     previous_status=old_task.status.value
 
-    task=await task_crud.update(db=db, task_id=task_id, obj_in=task_in, user_id=user_id)
-    if not task:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    try:
+        task=await task_crud.update(db=db, task_id=task_id, obj_in=task_in, user_id=user_id)
+        if not task:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     """Формирование изменений"""
     changes=task_in.model_dump(exclude_unset=True)
