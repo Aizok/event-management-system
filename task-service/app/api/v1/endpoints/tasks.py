@@ -120,9 +120,9 @@ async def update_task(
 
     await check_task_permissions(old_task, user_id)
 
-    previous_status=old_task.status
+    previous_status=old_task.status.value
 
-    task=await task_crud.update(db=db, task_id=task_id, obj_in=task_in)
+    task=await task_crud.update(db=db, task_id=task_id, obj_in=task_in, user_id=user_id)
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 

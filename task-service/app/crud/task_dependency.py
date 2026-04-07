@@ -62,6 +62,7 @@ class TaskDependencyCRUD:
 
         return result.rowcount > 0
 
+
     async def has_cycle(
             self,
             db: AsyncSession,

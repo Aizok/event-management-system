@@ -2,9 +2,11 @@ from sqlalchemy import select, func, update, delete, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from ..models.task import Task, TaskStatus
+from ..models.task_history import TaskHistory
 from ..schemas.task import TaskCreate, TaskUpdate
 from ..crud.task_dependency import task_dependency_crud
 from datetime import datetime, timezone, timedelta
+
 
 class TaskCRUD:
     async def create(self, db: AsyncSession, obj_in: TaskCreate, owner_id: int) -> Task:
@@ -48,14 +50,34 @@ class TaskCRUD:
         return result.scalars().all()
 
 
-    async def update(self, db: AsyncSession, task_id: int, obj_in: TaskUpdate) -> Optional[Task]:
+    async def update(self, db: AsyncSession, task_id: int, obj_in: TaskUpdate, user_id: int) -> Optional[Task]:
         db_obj=await self.get(db, task_id)
         if not db_obj:
             return None
 
         update_data=obj_in.model_dump(exclude_unset=True)
+        if not update_data:
+            await db.refresh(db_obj)
+            return db_obj
+
         for field, value in update_data.items():
-            setattr(db_obj, field, value)
+            old_value=getattr(db_obj, field)
+
+            if old_value != value:
+                history=TaskHistory(
+                    task_id=db_obj.id,
+                    changed_by=user_id,
+                    field=field,
+                    old_value=str(old_value) if old_value is not None else None,
+                    new_value=str(value) if value is not None else None
+                )
+                db.add(history)
+                setattr(db_obj, field, value)
+
+        await db.flush()
+
+        if "start_time" in update_data or "end_time" in update_data:
+            await self.recalculate_schedule(db, db_obj.id)
 
         await db.commit()
         await db.refresh(db_obj)
@@ -97,7 +119,7 @@ class TaskCRUD:
             update(Task)
             .where(
                 Task.deadline < now,
-                Task.status != TaskStatus.DONE
+                Task.status.notin_([TaskStatus.DONE, TaskStatus.OVERDUE])
             )
             .values(status=TaskStatus.OVERDUE)
         )
@@ -118,8 +140,21 @@ class TaskCRUD:
             if not child:
                 continue
 
-            if child.start_time and child.start_time < task.end_time:
-                delta=task.end_time - child.start_time
+            parent_ids=await task_dependency_crud.get_parent_ids(db, child_id)
+
+            parents=[]
+            for pid in parent_ids:
+                parent = await self.get(db, pid)
+                if parent:
+                    parents.append(parent)
+
+            if not parents:
+                continue
+
+            max_end=max(p.end_time for p in parents)
+
+            if child.start_time < max_end:
+                delta=max_end - child.start_time
 
                 child.start_time+=delta
                 child.end_time+=delta
