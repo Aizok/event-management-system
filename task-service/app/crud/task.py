@@ -57,8 +57,17 @@ class TaskCRUD:
 
         update_data=obj_in.model_dump(exclude_unset=True)
         if not update_data:
-            await db.refresh(db_obj)
             return db_obj
+
+        new_start = update_data.get("start_time", db_obj.start_time)
+        new_end = update_data.get("end_time", db_obj.end_time)
+        new_deadline = update_data.get("deadline", db_obj.deadline)
+
+        if new_start >= new_end:
+            raise ValueError("start_time must be < end_time")
+
+        if new_end > new_deadline:
+            raise ValueError("end_time must be <= deadline")
 
         for field, value in update_data.items():
             old_value=getattr(db_obj, field)
