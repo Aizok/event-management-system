@@ -8,6 +8,12 @@ from ..crud.task_dependency import task_dependency_crud
 from datetime import datetime, timezone, timedelta
 
 
+def serialize(value):
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value) if value is not None else None
+
+
 class TaskCRUD:
     async def create(self, db: AsyncSession, obj_in: TaskCreate, owner_id: int) -> Task:
         db_obj=Task(
@@ -77,8 +83,8 @@ class TaskCRUD:
                     task_id=db_obj.id,
                     changed_by=user_id,
                     field=field,
-                    old_value=str(old_value) if old_value is not None else None,
-                    new_value=str(value) if value is not None else None
+                    old_value=serialize(old_value),
+                    new_value=serialize(value)
                 )
                 db.add(history)
                 setattr(db_obj, field, value)
