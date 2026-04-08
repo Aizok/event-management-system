@@ -33,8 +33,7 @@ class TaskDependencyCRUD:
                 await self.sync_task_and_descendants(db, task_id)
 
         except IntegrityError:
-            if commit:
-                await db.rollback()
+            await db.rollback()
             raise ValueError("duplicate_dependency")
 
         return db_obj
