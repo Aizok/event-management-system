@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from ..models.task_dependency import TaskDependency
 from ..schemas.task import TaskCreate, TaskUpdate
-
+from .task import task_crud
 
 class TaskDependencyCRUD:
 
@@ -22,12 +22,19 @@ class TaskDependencyCRUD:
 
         try:
             if commit:
+                await db.flush()
+                await self.sync_task_and_descendants(db, task_id)
+
                 await db.commit()
                 await db.refresh(db_obj)
             else:
                 await db.flush()
 
+                await self.sync_task_and_descendants(db, task_id)
+
         except IntegrityError:
+            if commit:
+                await db.rollback()
             raise ValueError("duplicate_dependency")
 
         return db_obj
@@ -58,6 +65,9 @@ class TaskDependencyCRUD:
             TaskDependency.depends_on_task_id==depends_on_task_id
         )
         result=await db.execute(query)
+
+        if result.rowcount > 0:
+            await self.sync_task_and_descendants(db, task_id)
         await db.commit()
 
         return result.rowcount > 0
@@ -113,6 +123,27 @@ class TaskDependencyCRUD:
         )
         result = await db.execute(query)
         return [row[0] for row in result.all()]
+
+
+    async def sync_task_and_descendants(self, db: AsyncSession, task_id: int):
+        to_visit=[task_id]
+        visited=set()
+
+        while to_visit:
+            current_id=to_visit.pop()
+
+            if current_id in visited:
+                continue
+
+            visited.add(current_id)
+
+            task=await task_crud.get(db, current_id)
+            if task:
+                await task_crud.sync_blocked_status(db, task)
+
+            # Идём дальше по графу
+            children=await self.get_child_ids(db, current_id)
+            to_visit.extend(children)
 
 
 task_dependency_crud = TaskDependencyCRUD()

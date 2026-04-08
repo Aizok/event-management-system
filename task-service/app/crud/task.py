@@ -21,6 +21,10 @@ class TaskCRUD:
             owner_id=owner_id
         )
         db.add(db_obj)
+        await db.flush()
+
+        await self.sync_blocked_status(db, db_obj)
+
         await db.commit()
         await db.refresh(db_obj)
         return db_obj
@@ -65,6 +69,12 @@ class TaskCRUD:
         if not update_data:
             return db_obj
 
+        new_status = update_data.get("status")
+        if new_status in [TaskStatus.IN_PROGRESS, TaskStatus.DONE]:
+            has_blockers = await self.has_unfinished_parents(db, task_id)
+            if has_blockers:
+                raise ValueError("Task is blocked by unfinished dependencies")
+
         new_start = update_data.get("start_time", db_obj.start_time)
         new_end = update_data.get("end_time", db_obj.end_time)
         new_deadline = update_data.get("deadline", db_obj.deadline)
@@ -90,6 +100,7 @@ class TaskCRUD:
                 setattr(db_obj, field, value)
 
         await db.flush()
+        await self.sync_blocked_status(db, db_obj)
 
         if "start_time" in update_data or "end_time" in update_data:
             await self.recalculate_schedule(db, db_obj.id)
@@ -179,5 +190,33 @@ class TaskCRUD:
                 # Рекурсивно вниз
                 await self.recalculate_schedule(db, child_id)
 
+
+    async def has_unfinished_parents(self, db: AsyncSession, task_id: int) -> bool:
+        parent_ids=await task_dependency_crud.get_parent_ids(db, task_id)
+
+        if not parent_ids:
+            return False
+
+        query=select(Task.status).where(Task.id.in_(parent_ids))
+        result=await db.execute(query)
+        statuses=result.scalars().all()
+
+        return any(status != TaskStatus.DONE for status in statuses)
+
+
+    async def sync_blocked_status(self, db: AsyncSession, task: Task):
+        # Не меняем статус завершенных и просроченных задач
+        if task.status in [TaskStatus.DONE, TaskStatus.OVERDUE]:
+            return
+
+        has_blockers=await self.has_unfinished_parents(db, task.id)
+        if has_blockers:
+            # Меняем статус, если задача ещё на завершена
+            if task.status == TaskStatus.TODO:
+                task.status=TaskStatus.BLOCKED
+        else:
+            # Разблокировать, если была blocked
+            if task.status == TaskStatus.BLOCKED:
+                task.status=TaskStatus.TODO
 
 task_crud=TaskCRUD()

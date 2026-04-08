@@ -6,11 +6,13 @@ from .base import Base
 import enum
 
 
+
 class TaskStatus(str, enum.Enum):
     TODO="todo"
     IN_PROGRESS="in_progress"
     DONE="done"
     OVERDUE="overdue"
+    BLOCKED="blocked"
 
 
 class TaskPriority(str, enum.Enum):
