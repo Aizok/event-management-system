@@ -14,6 +14,13 @@ def serialize(value):
     return str(value) if value is not None else None
 
 
+def calculate_delay(task: Task) -> timedelta | None:
+    if not task.actual_end_time:
+        return None
+
+    return task.actual_end_time - task.end_time
+
+
 class TaskCRUD:
     async def create(self, db: AsyncSession, obj_in: TaskCreate, owner_id: int) -> Task:
         db_obj=Task(
@@ -70,10 +77,20 @@ class TaskCRUD:
             return db_obj
 
         new_status = update_data.get("status")
+
         if new_status in [TaskStatus.IN_PROGRESS, TaskStatus.DONE]:
             has_blockers = await self.has_unfinished_parents(db, task_id)
             if has_blockers:
                 raise ValueError("Task is blocked by unfinished dependencies")
+
+        now=datetime.now(timezone.utc)
+        if new_status==TaskStatus.IN_PROGRESS:
+            if db_obj.actual_start_time is None:
+                db_obj.actual_start_time=now
+
+        if new_status==TaskStatus.DONE:
+            if db_obj.actual_end_time is None:
+                db_obj.actual_end_time=now
 
         new_start = update_data.get("start_time", db_obj.start_time)
         new_end = update_data.get("end_time", db_obj.end_time)
@@ -131,6 +148,8 @@ class TaskCRUD:
                                 )
                         except ValueError:
                             continue
+                for child_id in child_ids:
+                    await self.recalculate_schedule(db, child_id)
 
             query=delete(Task).where(Task.id==task_id)
             result=await db.execute(query)
@@ -145,6 +164,7 @@ class TaskCRUD:
             update(Task)
             .where(
                 Task.deadline < now,
+                Task.actual_end_time.is_(None),
                 Task.status.notin_([TaskStatus.DONE, TaskStatus.OVERDUE])
             )
             .values(status=TaskStatus.OVERDUE)
@@ -154,10 +174,16 @@ class TaskCRUD:
         await db.commit()
 
 
-    async def recalculate_schedule(self, db: AsyncSession, task_id: int):
+    async def recalculate_schedule(self, db: AsyncSession, task_id: int, visited=None):
         task=await self.get(db, task_id)
         if not task:
             return
+
+        if visited is None:
+            visited=set()
+        if task_id in visited:
+            return
+        visited.add(task_id)
 
         children_ids=await task_dependency_crud.get_child_ids(db, task_id)
 
@@ -177,7 +203,7 @@ class TaskCRUD:
             if not parents:
                 continue
 
-            max_end=max(p.end_time for p in parents)
+            max_end=max(p.actual_end_time or p.end_time for p in parents)
 
             if child.start_time < max_end:
                 delta=max_end - child.start_time
@@ -186,7 +212,7 @@ class TaskCRUD:
                 child.end_time+=delta
 
                 await db.flush()
-
+                await self.sync_blocked_status(db, child)
                 # Рекурсивно вниз
                 await self.recalculate_schedule(db, child_id)
 
@@ -212,11 +238,20 @@ class TaskCRUD:
         has_blockers=await self.has_unfinished_parents(db, task.id)
         if has_blockers:
             # Меняем статус, если задача ещё на завершена
-            if task.status == TaskStatus.TODO:
+            if task.status in [TaskStatus.TODO, TaskStatus.IN_PROGRESS]:
                 task.status=TaskStatus.BLOCKED
         else:
             # Разблокировать, если была blocked
             if task.status == TaskStatus.BLOCKED:
                 task.status=TaskStatus.TODO
+
+
+    async def get_critical_tasks(self, db: AsyncSession):
+        query=select(Task).where(
+            Task.actual_end_time.is_not(None),
+            Task.actual_end_time>Task.end_time
+        )
+        result=await db.execute(query)
+        return result.scalars().all()
 
 task_crud=TaskCRUD()

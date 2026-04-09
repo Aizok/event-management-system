@@ -139,6 +139,7 @@ class TaskDependencyCRUD:
             task=await task_crud.get(db, current_id)
             if task:
                 await task_crud.sync_blocked_status(db, task)
+                await task_crud.recalculate_schedule(db, current_id)
 
             # Идём дальше по графу
             children=await self.get_child_ids(db, current_id)
