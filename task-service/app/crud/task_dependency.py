@@ -29,7 +29,6 @@ class TaskDependencyCRUD:
                 await db.refresh(db_obj)
             else:
                 await db.flush()
-
                 await self.sync_task_and_descendants(db, task_id)
 
         except IntegrityError:
