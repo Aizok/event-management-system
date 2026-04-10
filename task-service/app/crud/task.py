@@ -7,6 +7,14 @@ from ..schemas.task import TaskCreate, TaskUpdate
 from ..crud.task_dependency import task_dependency_crud
 from datetime import datetime, timezone, timedelta
 
+START_GRACE_PERIOD = timedelta(minutes=5)
+
+def is_late_start(task: Task):
+    if not task.actual_start_time:
+        return False
+
+    return task.actual_start_time > task.start_time + START_GRACE_PERIOD
+
 
 def serialize(value):
     if isinstance(value, datetime):
@@ -51,19 +59,29 @@ class TaskCRUD:
     async def get(self, db: AsyncSession, task_id: int) -> Optional[Task]:
         query = select(Task).where(Task.id == task_id)
         result=await db.execute(query)
-        return result.scalar_one_or_none()
+        task=result.scalar_one_or_none()
+
+        if task:
+            task.is_late_start=is_late_start(task)
+        return task
 
 
     async def get_multi(self, db: AsyncSession, skip: int=0, limit: int=100) -> List[Task]:
         query = select(Task).offset(skip).limit(limit).order_by(Task.created_at.desc())
         result = await db.execute(query)
-        return result.scalars().all()
+        tasks = result.scalars().all()
+        for task in tasks:
+            task.is_late_start=is_late_start(task)
+        return tasks
 
 
     async def get_by_event(self, db: AsyncSession, event_id: int) -> List[Task]:
         query=select(Task).where(Task.event_id==event_id).order_by(desc(Task.created_at))
         result=await db.execute(query)
-        return result.scalars().all()
+        tasks = result.scalars().all()
+        for task in tasks:
+            task.is_late_start=is_late_start(task)
+        return tasks
 
 
     async def get_by_event_ids(self, db: AsyncSession, event_ids: List[int] ,skip: int=0, limit: int=100):
@@ -75,7 +93,10 @@ class TaskCRUD:
             .limit(limit)
         )
         result=await db.execute(query)
-        return result.scalars().all()
+        tasks = result.scalars().all()
+        for task in tasks:
+            task.is_late_start = is_late_start(task)
+        return tasks
 
 
     async def update(self, db: AsyncSession, task_id: int, obj_in: TaskUpdate, user_id: int) -> Optional[Task]:

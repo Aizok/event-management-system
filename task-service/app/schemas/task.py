@@ -38,6 +38,8 @@ class TaskResponse(BaseModel):
     owner_id: int
     assignee_id: Optional[int]
 
+    is_late_start: bool = False
+
     model_config = ConfigDict(from_attributes=True)
 
 
