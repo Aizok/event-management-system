@@ -31,7 +31,7 @@ class ResourceResponse(ResourceBase):
     owner_id: int
     created_at: datetime
     updated_at: Optional[datetime]
-    allocations: List["ResourceAllocationResponse"]=[]
+    allocations: List["ResourceAllocationResponse"]=Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -39,7 +39,7 @@ class ResourceResponse(ResourceBase):
 class ResourceAllocationCreate(BaseModel):
     resource_id: int
     task_id: Optional[int]=None
-    event_id: Optional[int]=None
+    event_id: int
     quantity_used: int=1
     date_start: datetime
     date_end: datetime
@@ -58,8 +58,8 @@ class ResourceAllocationResponse(BaseModel):
     id: int
     resource_id: int
     task_id: Optional[int]
-    event_id: Optional[int]
-    owner_id: Optional[int]
+    event_id: int
+    owner_id: int
     quantity_used: int
     status: ResourceStatus
     date_start: datetime

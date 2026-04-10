@@ -53,7 +53,7 @@ class ResourceAllocation(Base):
     )
 
     task_id: Mapped[int]=mapped_column(Integer, nullable=True, index=True)
-    event_id: Mapped[int]=mapped_column(Integer, nullable=True, index=True)
+    event_id: Mapped[int]=mapped_column(Integer, nullable=False, index=True)
     owner_id: Mapped[int]=mapped_column(Integer, nullable=False, index=True)
 
     quantity_used: Mapped[int]=mapped_column(Integer, default=1)
@@ -61,4 +61,3 @@ class ResourceAllocation(Base):
 
     date_start: Mapped[DateTime]=mapped_column(DateTime(timezone=True), nullable=False)
     date_end: Mapped[DateTime]=mapped_column(DateTime(timezone=True), nullable=False)
-
