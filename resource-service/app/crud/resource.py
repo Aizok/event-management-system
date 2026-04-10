@@ -1,5 +1,4 @@
 from datetime import datetime
-
 from sqlalchemy import select, func, update, delete, desc
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -109,6 +108,7 @@ class ResourceCRUD:
         start=obj_in.date_start or db_obj.date_start
         end=obj_in.date_end or db_obj.date_end
         resource_id=obj_in.resource_id or db_obj.resource_id
+
         if start >= end:
             raise ValueError("Invalid time range")
 
@@ -125,8 +125,12 @@ class ResourceCRUD:
         )
 
         used_quantity = sum(a.quantity_used for a in overlaps)
-        new_quantity=obj_in.quantity_used or db_obj.quantity_used
-        # or тут нужен, потому что в update могут и не передать quantity_used. В таком случае берём старое значение
+        new_quantity=(
+            obj_in.quantity_used
+            if obj_in.quantity_used is not None
+            else db_obj.quantity_used
+        )
+        # в update могут и не передать quantity_used. В таком случае берём старое значение
 
         if used_quantity + new_quantity > resource.quantity:
             raise ValueError("Not enough resource available")
@@ -154,7 +158,7 @@ class ResourceCRUD:
             ResourceAllocation.date_end>start
         )
 
-        if exclude_id:
+        if exclude_id is not None:
             query=query.where(ResourceAllocation.id != exclude_id)
 
         result=await db.execute(query)
