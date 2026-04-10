@@ -11,6 +11,8 @@ from datetime import datetime, timezone, timedelta
 def serialize(value):
     if isinstance(value, datetime):
         return value.isoformat()
+    if hasattr(value, "value"):
+        return value.value
     return str(value) if value is not None else None
 
 
@@ -29,6 +31,15 @@ class TaskCRUD:
         )
         db.add(db_obj)
         await db.flush()
+
+        history = TaskHistory(
+            task_id=db_obj.id,
+            changed_by=owner_id,
+            field="created",
+            old_value=None,
+            new_value="task created"
+        )
+        db.add(history)
 
         await self.sync_blocked_status(db, db_obj)
 

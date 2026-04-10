@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from .api.v1.endpoints import tasks
 from .api.v1.endpoints import task_dependencies
+from .api.v1.endpoints import task_history
 from .core.config import settings
 from .core.events import producer
 import asyncio
@@ -44,6 +45,7 @@ app=FastAPI(
 
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(task_dependencies.router, prefix="/api/tasks", tags=["task-dependencies"])
+app.include_router(task_history.router, prefix="/api/tasks", tags=["task-history"])
 
 @app.get("/health")
 async def health_check():
