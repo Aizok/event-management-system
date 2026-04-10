@@ -3,8 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from ..models.task_dependency import TaskDependency
-from ..schemas.task import TaskCreate, TaskUpdate
-from .task import task_crud
+# from .task import task_crud
 
 class TaskDependencyCRUD:
 
@@ -124,6 +123,8 @@ class TaskDependencyCRUD:
 
 
     async def sync_task_and_descendants(self, db: AsyncSession, task_id: int):
+        from .task import task_crud
+
         to_visit=[task_id]
         visited=set()
 
