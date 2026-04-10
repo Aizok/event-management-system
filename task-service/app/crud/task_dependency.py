@@ -3,8 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from ..models.task_dependency import TaskDependency
-from ..services.task_service import task_service
-
+from ..schemas.task import TaskCreate, TaskUpdate
+from .task import task_crud
 
 class TaskDependencyCRUD:
 
@@ -23,13 +23,13 @@ class TaskDependencyCRUD:
         try:
             if commit:
                 await db.flush()
-                await task_service.sync_task_and_descendants(db, task_id)
+                await self.sync_task_and_descendants(db, task_id)
 
                 await db.commit()
                 await db.refresh(db_obj)
             else:
                 await db.flush()
-                await task_service.sync_task_and_descendants(db, task_id)
+                await self.sync_task_and_descendants(db, task_id)
 
         except IntegrityError:
             await db.rollback()
@@ -65,7 +65,7 @@ class TaskDependencyCRUD:
         result=await db.execute(query)
 
         if result.rowcount > 0:
-            await task_service.sync_task_and_descendants(db, task_id)
+            await self.sync_task_and_descendants(db, task_id)
         await db.commit()
 
         return result.rowcount > 0
@@ -121,6 +121,28 @@ class TaskDependencyCRUD:
         )
         result = await db.execute(query)
         return [row[0] for row in result.all()]
+
+
+    async def sync_task_and_descendants(self, db: AsyncSession, task_id: int):
+        to_visit=[task_id]
+        visited=set()
+
+        while to_visit:
+            current_id=to_visit.pop()
+
+            if current_id in visited:
+                continue
+
+            visited.add(current_id)
+
+            task=await task_crud.get(db, current_id)
+            if task:
+                await task_crud.sync_blocked_status(db, task)
+                await task_crud.recalculate_schedule(db, current_id)
+
+            # Идём дальше по графу
+            children=await self.get_child_ids(db, current_id)
+            to_visit.extend(children)
 
 
 task_dependency_crud = TaskDependencyCRUD()
