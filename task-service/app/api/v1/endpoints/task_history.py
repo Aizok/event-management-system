@@ -15,7 +15,7 @@ from ....core.event_client import get_user_role_in_event
 router=APIRouter()
 
 
-@router.get("tasks/{task_id}/history", response_model=List[TaskHistoryResponse])
+@router.get("/tasks/{task_id}/history", response_model=List[TaskHistoryResponse])
 async def get_task_history(
         task_id: int,
         db: AsyncSession=Depends(get_db),
@@ -29,7 +29,7 @@ async def get_task_history(
     history=await task_history_crud.get_by_task(db, task_id)
     return history
 
-@router.delete("tasks/{task_id}/history/{history_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/tasks/{task_id}/history/{history_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_history(
         history_id: int,
         db: AsyncSession=Depends(get_db),
