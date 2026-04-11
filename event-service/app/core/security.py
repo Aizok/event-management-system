@@ -7,8 +7,8 @@ from ..schemas.event import TokenData, TokenRole
 import logging
 
 logger=logging.getLogger(__name__)
-
 oauth2_scheme=OAuth2PasswordBearer(tokenUrl="auth/login")
+
 
 def decode_access_token(token: str) -> Optional[TokenData]:
     try:

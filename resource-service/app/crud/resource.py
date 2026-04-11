@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from ..models.resource import Resource, ResourceAllocation
 from ..schemas.resource import ResourceCreate, ResourceUpdate, ResourceAllocationCreate, ResourceAllocationUpdate
+from ..core.task_client import get_task
 
 class ResourceCRUD:
     async def create_resource(self, db: AsyncSession, obj_in: ResourceCreate, owner_id: int) -> Resource:
@@ -59,13 +60,33 @@ class ResourceCRUD:
 
     """Allocations"""
     async def create_allocation(self, db: AsyncSession, obj_in: ResourceAllocationCreate, owner_id: int) -> ResourceAllocation:
+
+        # Проверка корректности временного диапазона
         if obj_in.date_start >= obj_in.date_end:
             raise ValueError("Invalid time range")
 
+        # Проверка существования ресурса
         resource=await self.get_resource(db, obj_in.resource_id)
         if not resource:
             raise ValueError("Resource not found")
 
+        # Если есть task_id, то есть ли такая task
+        if obj_in.task_id is not None:
+            task=await get_task(obj_in.task_id)
+            if not task:
+                raise ValueError("Task not found")
+            # Проверка, чтобы event_id у RA совпадал с event_id таски
+            if task["event_id"] != obj_in.event_id:
+                raise ValueError("Task does not belong to this event")
+            if task["status"] == "DONE":
+                raise ValueError("Cannot allocate to completed task")
+
+            task_start = datetime.fromisoformat(task["start_time"])
+            task_end = datetime.fromisoformat(task["end_time"])
+
+            if obj_in.date_start < task_start or obj_in.date_end > task_end:
+                raise ValueError("Allocation outside task time")
+        # Проверка конфликтов использования ресурса (по количеству)
         overlaps=await self.get_overlapping_allocations(
             db,
             obj_in.resource_id,
@@ -77,6 +98,7 @@ class ResourceCRUD:
         if used_quantity + obj_in.quantity_used > resource.quantity:
             raise ValueError("Not enough resource available")
 
+        # Создание
         db_obj=ResourceAllocation(
             **obj_in.model_dump(),
             owner_id=owner_id
@@ -105,23 +127,47 @@ class ResourceCRUD:
         if not db_obj:
             return None
 
+        # Получение нужных значений, если они не переданы, берём старые
         start=obj_in.date_start or db_obj.date_start
         end=obj_in.date_end or db_obj.date_end
         resource_id=obj_in.resource_id or db_obj.resource_id
+        event_id=obj_in.event_id or db_obj.event_id
+        task_id=obj_in.task_id if obj_in.task_id is not None else db_obj.task_id
 
+        # Корректность временного интервала
         if start >= end:
             raise ValueError("Invalid time range")
 
+        # Проверка ресурса
         resource = await self.get_resource(db, resource_id)
         if not resource:
             raise ValueError("Resource not found")
 
+        # Проверка таски
+        if task_id is not None:
+            task=await get_task(task_id)
+            if not task:
+                raise ValueError("Task not found")
+            # Проверка принадлежности таски к ивенту
+            if task["event_id"] != event_id:
+                raise ValueError("Task does not belong to this event")
+            if task["status"] == "DONE":
+                raise ValueError("Cannot allocate to completed task")
+
+            task_start=datetime.fromisoformat(task["start_time"])
+            task_end=datetime.fromisoformat(task["end_time"])
+
+            if start<task_start or end > task_end:
+                raise ValueError("Allocation outside task time")
+
+        # Проверка конфликтов
         overlaps = await self.get_overlapping_allocations(
             db,
             resource_id,
             start,
             end,
             exclude_id=db_obj.id
+            # exclude_id для исключения подсчёта данного ресурса, так как запись о нём уже есть
         )
 
         used_quantity = sum(a.quantity_used for a in overlaps)

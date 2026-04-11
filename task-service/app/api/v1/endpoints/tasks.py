@@ -2,15 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession 
 from typing import List
 from ....core.database import get_db
-from ....core.security import get_current_user_id
+from ....core.security import get_current_user_id, get_current_service
 from ....crud.task import task_crud
-from ....schemas.task import TaskCreate, TaskUpdate, TaskResponse
+from ....schemas.task import TaskCreate, TaskUpdate, TaskResponse, TokenData
 from ....core.events import publish_task_created, publish_task_updated
 from ....core.permissions import check_task_permissions, ALLOWED_ROLES
 from ....core.auth_client import is_admin
 from ....core.event_client import get_user_events_with_roles
 from ....core.event_client import get_user_role_in_event
 
+ALLOWED_SERVICES={"resource-service"}
 
 router = APIRouter()
 
@@ -67,6 +68,33 @@ async def read_tasks(
         skip,
         limit
     )
+
+
+@router.get("/internal/tasks/{task_id}")
+async def get_task_internal(
+        task_id: int,
+        db: AsyncSession = Depends(get_db),
+        service: TokenData=Depends(get_current_service)
+):
+    if service.service_name not in ALLOWED_SERVICES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed"
+        )
+    task=await task_crud.get(db, task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found"
+        )
+
+    return {
+        "id": task.id,
+        "status": task.status,
+        "start_time": task.start_time,
+        "end_time": task.end_time,
+        "event_id": task.event_id
+    }
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

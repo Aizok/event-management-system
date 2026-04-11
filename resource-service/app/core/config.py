@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
 
+    SERVICE_SECRET_RESOURCE: str
+
     PROJECT_NAME: str="Resource Service"
     VERSION: str="1.0.0"
 

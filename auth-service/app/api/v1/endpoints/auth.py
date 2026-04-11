@@ -34,6 +34,9 @@ async def get_service_token(req: ServiceTokenRequest):
     elif req.service_name == "event-service":
         if req.service_secret != settings.SERVICE_SECRET_EVENT:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid service secret")
+    elif req.service_name == "resource-service":
+        if req.service_secret != settings.SERVICE_SECRET_RESOURCE:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid service secret")
     else:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unknown service")
     # Создание JWT для сервисов
