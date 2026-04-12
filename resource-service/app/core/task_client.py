@@ -8,7 +8,7 @@ logger=logging.getLogger(__name__)
 
 
 async def get_task(task_id: int):
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=7.0) as client:
         try:
             token = await get_service_token()
             url = f"http://task-service:8004/api/tasks/internal/tasks/{task_id}"

@@ -3,7 +3,7 @@ import enum
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 from datetime import datetime
-from ..models.resource import ResourceStatus, ResourceType
+from ..models.resource import AllocationStatus, ResourceType
 
 
 class ResourceBase(BaseModel):
@@ -61,7 +61,7 @@ class ResourceAllocationResponse(BaseModel):
     event_id: int
     owner_id: int
     quantity_used: int
-    status: ResourceStatus
+    status: AllocationStatus
     date_start: datetime
     date_end: datetime
 

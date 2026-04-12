@@ -6,7 +6,7 @@ import logging
 logger=logging.getLogger(__name__)
 
 async def get_service_token() -> str:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=7.0) as client:
         resp = await client.post(
             "http://auth-service:8001/api/auth/internal/token",
         json={

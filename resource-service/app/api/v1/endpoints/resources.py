@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession 
 from typing import List
 
-
 from ....core.database import get_db
 from ....core.security import get_current_user_id
 from ....crud.resource import resource_crud
+from ....models.resource import AllocationStatus
 from ....schemas.resource import (
     ResourceCreate, ResourceUpdate, ResourceResponse,
     ResourceAllocationCreate, ResourceAllocationUpdate, ResourceAllocationResponse)
@@ -31,7 +31,7 @@ async def read_resources(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    resources=await resource_crud.get_multi_resources(db, skip=skip, limit=limit, owner_id=user_id)
+    resources=await resource_crud.get_multi_resources(db, skip=skip, limit=limit)
     return resources
 
 
@@ -41,7 +41,7 @@ async def read_resource(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    resource = await resource_crud.get_with_allocations(db, resource_id, user_id)
+    resource = await resource_crud.get_with_allocations(db, resource_id)
     if not resource:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
     return resource
@@ -54,7 +54,7 @@ async def update_resource(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    resource=await resource_crud.update_resource(db, resource_id, resource_in, user_id)
+    resource=await resource_crud.update_resource(db, resource_id, resource_in)
     if not resource:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
     return resource
@@ -66,7 +66,7 @@ async def delete_resource(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    success = await resource_crud.delete_resource(db, resource_id, user_id)
+    success = await resource_crud.delete_resource(db, resource_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -92,7 +92,7 @@ async def read_allocations(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    allocations=await resource_crud.get_multi_allocations(db, skip=skip, limit=limit, owner_id=user_id)
+    allocations=await resource_crud.get_multi_allocations(db, skip=skip, limit=limit)
     return allocations
 
 
@@ -102,7 +102,7 @@ async def read_allocation(
         db: AsyncSession=Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    allocation=await resource_crud.get_allocation(db, allocation_id, user_id)
+    allocation=await resource_crud.get_allocation(db, allocation_id)
     if not allocation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Allocation not found")
     return allocation
@@ -115,9 +115,9 @@ async def update_allocation(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    allocation=await resource_crud.update_allocation(db, allocation_id, allocation_in, user_id)
+    allocation=await resource_crud.update_allocation(db, allocation_id, allocation_in)
     if not allocation:
-        raise HTTPException(status_code=404, detail="Resource allocation not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource allocation not found")
     return allocation
 
 
@@ -126,6 +126,23 @@ async def delete_allocation(
         allocation_id: int,
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)):
-    success = await resource_crud.delete_allocation(db, allocation_id, user_id)
+    success = await resource_crud.delete_allocation(db, allocation_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource allocation not found or access denied")
+
+
+@router.patch("/allocations/{allocation_id}/cancel")
+async def cancel_allocation(
+        allocation_id: int,
+        db: AsyncSession = Depends(get_db)
+):
+    allocation=await resource_crud.get_allocation(db, allocation_id)
+    if not allocation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource allocation not found")
+    if allocation.status in [AllocationStatus.COMPLETED, AllocationStatus.CANCELLED]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot cancel completed and cancelled allocation")
+
+    allocation.status=AllocationStatus.CANCELLED
+    await db.commit()
+    await db.refresh(allocation)
+    return {"status": "cancelled"}

@@ -1,9 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import select, func, update, delete, desc
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
-from ..models.resource import Resource, ResourceAllocation
+from ..models.resource import Resource, ResourceAllocation, AllocationStatus
 from ..schemas.resource import ResourceCreate, ResourceUpdate, ResourceAllocationCreate, ResourceAllocationUpdate
 from ..core.task_client import get_task
 
@@ -127,6 +127,9 @@ class ResourceCRUD:
         if not db_obj:
             return None
 
+        if db_obj.status in [AllocationStatus.CANCELLED, AllocationStatus.COMPLETED]:
+            raise ValueError("Cannot update completed or cancelled allocation")
+
         # Получение нужных значений, если они не переданы, берём старые
         start=obj_in.date_start or db_obj.date_start
         end=obj_in.date_end or db_obj.date_end
@@ -176,14 +179,25 @@ class ResourceCRUD:
             if obj_in.quantity_used is not None
             else db_obj.quantity_used
         )
-        # в update могут и не передать quantity_used. В таком случае берём старое значение
+        # В update могут и не передать quantity_used. В таком случае берём старое значение
 
         if used_quantity + new_quantity > resource.quantity:
             raise ValueError("Not enough resource available")
 
-        update_data = obj_in.model_dump(exclude_unset=True)
+        # Обновление полей
+        update_data = obj_in.model_dump(exclude_unset=True, exclude={"status"})
         for field, value in update_data.items():
             setattr(db_obj, field, value)
+
+        # Изменение статуса
+        now=datetime.now(timezone.utc)
+        if end <= now:
+            db_obj.status = AllocationStatus.COMPLETED
+        elif start <= now <end:
+            db_obj.status=AllocationStatus.ACTIVE
+        else:
+            db_obj.status = AllocationStatus.PLANNED
+
 
         await db.commit()
         await db.refresh(db_obj)
@@ -197,9 +211,11 @@ class ResourceCRUD:
         return result.rowcount > 0
 
 
+    """ Различная логика """
     async def get_overlapping_allocations(self, db: AsyncSession, resource_id: int, start: datetime, end: datetime, exclude_id: int | None = None):
         query=select(ResourceAllocation).where(
             ResourceAllocation.resource_id==resource_id,
+            ResourceAllocation.status != AllocationStatus.CANCELLED,
             ResourceAllocation.date_start<end,
             ResourceAllocation.date_end>start
         )
@@ -209,6 +225,33 @@ class ResourceCRUD:
 
         result=await db.execute(query)
         return result.scalars().all()
+
+
+    async def update_allocation_statuses(self, db: AsyncSession):
+        now=datetime.now(timezone.utc)
+        # Planned в Active
+        query=(
+            update(ResourceAllocation)
+            .where(
+                ResourceAllocation.status == AllocationStatus.PLANNED,
+                ResourceAllocation.date_start <= now,
+                ResourceAllocation.date_end > now
+            )
+            .values(status=AllocationStatus.ACTIVE)
+        )
+        await db.execute(query)
+
+        # Active в Completed
+        query = (
+            update(ResourceAllocation)
+            .where(
+                ResourceAllocation.status == AllocationStatus.ACTIVE,
+                ResourceAllocation.date_end <= now
+            )
+            .values(status=AllocationStatus.COMPLETED)
+        )
+        await db.execute(query)
+        await db.commit()
 
 
 resource_crud=ResourceCRUD()

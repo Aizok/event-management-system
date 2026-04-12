@@ -11,10 +11,12 @@ class ResourceType(str, enum.Enum):
     PERSONNEL = "personnel"
     MATERIAL = "material"
 
-class ResourceStatus(str, enum.Enum):
-    AVAILABLE = "available"
-    BOOKED = "booked"
-    MAINTENANCE = "maintenance"
+
+class AllocationStatus(str, enum.Enum):
+    PLANNED = "planned"  # создано, но ещё не началось
+    ACTIVE = "active"  # сейчас используется
+    COMPLETED = "completed"  # закончилось
+    CANCELLED = "cancelled"  # отменено
 
 
 class Resource(Base):
@@ -57,7 +59,7 @@ class ResourceAllocation(Base):
     owner_id: Mapped[int]=mapped_column(Integer, nullable=False, index=True)
 
     quantity_used: Mapped[int]=mapped_column(Integer, default=1)
-    status: Mapped[ResourceStatus]=mapped_column(SAEnum(ResourceStatus), default=ResourceStatus.AVAILABLE)
+    status: Mapped[AllocationStatus]=mapped_column(SAEnum(AllocationStatus), default=AllocationStatus.PLANNED)
 
     date_start: Mapped[DateTime]=mapped_column(DateTime(timezone=True), nullable=False)
     date_end: Mapped[DateTime]=mapped_column(DateTime(timezone=True), nullable=False)
