@@ -104,6 +104,14 @@ class ResourceCRUD:
             owner_id=owner_id
         )
 
+        now=datetime.now(timezone.utc)
+        if obj_in.date_end <= now:
+            db_obj.status = AllocationStatus.COMPLETED
+        elif obj_in.date_start <= now < obj_in.date_end:
+            db_obj.status=AllocationStatus.ACTIVE
+        else:
+            db_obj.status = AllocationStatus.PLANNED
+
         db.add(db_obj)
         await db.commit()
         await db.refresh(db_obj)
