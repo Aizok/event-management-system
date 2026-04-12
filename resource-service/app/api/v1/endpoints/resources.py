@@ -81,7 +81,13 @@ async def create_allocation(
         db: AsyncSession=Depends(get_db),
         user_id: int =Depends(get_current_user_id)
 ):
-    allocation=await resource_crud.create_allocation(db=db, obj_in=allocation_in, owner_id=user_id)
+    try:
+        allocation=await resource_crud.create_allocation(db=db, obj_in=allocation_in, owner_id=user_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     return allocation
 
 
@@ -115,7 +121,13 @@ async def update_allocation(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    allocation=await resource_crud.update_allocation(db, allocation_id, allocation_in)
+    try:
+        allocation=await resource_crud.update_allocation(db, allocation_id, allocation_in)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     if not allocation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource allocation not found")
     return allocation
