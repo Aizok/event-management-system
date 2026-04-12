@@ -81,8 +81,8 @@ class ResourceCRUD:
             if task["status"] == "DONE":
                 raise ValueError("Cannot allocate to completed task")
 
-            task_start = datetime.fromisoformat(task["start_time"])
-            task_end = datetime.fromisoformat(task["end_time"])
+            task_start = datetime.fromisoformat(task["start_time"].replace("Z", "+00:00"))
+            task_end = datetime.fromisoformat(task["end_time"].replace("Z", "+00:00"))
 
             if obj_in.date_start < task_start or obj_in.date_end > task_end:
                 raise ValueError("Allocation outside task time")
@@ -154,8 +154,8 @@ class ResourceCRUD:
             if task["status"] == "DONE":
                 raise ValueError("Cannot allocate to completed task")
 
-            task_start=datetime.fromisoformat(task["start_time"])
-            task_end=datetime.fromisoformat(task["end_time"])
+            task_start=datetime.fromisoformat(task["start_time"].replace("Z", "+00:00"))
+            task_end=datetime.fromisoformat(task["end_time"].replace("Z", "+00:00"))
 
             if start<task_start or end > task_end:
                 raise ValueError("Allocation outside task time")
