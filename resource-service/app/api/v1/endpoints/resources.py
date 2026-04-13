@@ -4,6 +4,7 @@ from typing import List
 
 from ....core.database import get_db
 from ....core.security import get_current_user_id
+from ....core.permissions import check_resource_permissions
 from ....crud.resource import resource_crud
 from ....models.resource import AllocationStatus
 from ....schemas.resource import (
@@ -81,6 +82,7 @@ async def create_allocation(
         db: AsyncSession=Depends(get_db),
         user_id: int =Depends(get_current_user_id)
 ):
+    await check_resource_permissions(allocation_in.event_id, user_id)
     try:
         allocation=await resource_crud.create_allocation(db=db, obj_in=allocation_in, owner_id=user_id)
     except ValueError as e:
@@ -111,6 +113,7 @@ async def read_allocation(
     allocation=await resource_crud.get_allocation(db, allocation_id)
     if not allocation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Allocation not found")
+    await check_resource_permissions(allocation.event_id, user_id)
     return allocation
 
 
@@ -121,23 +124,41 @@ async def update_allocation(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
+    allocation=await resource_crud.get_allocation(db, allocation_id)
+    if not allocation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resource allocation not found"
+        )
+
+    await check_resource_permissions(allocation_in.event_id, user_id)
+
     try:
-        allocation=await resource_crud.update_allocation(db, allocation_id, allocation_in)
+        updated=await resource_crud.update_allocation(db, allocation_id, allocation_in)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    if not allocation:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource allocation not found")
-    return allocation
+
+    return updated
 
 
 @router.delete("/allocations/{allocation_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_allocation(
         allocation_id: int,
         db: AsyncSession = Depends(get_db),
-        user_id: int = Depends(get_current_user_id)):
+        user_id: int = Depends(get_current_user_id)
+):
+    allocation=await resource_crud.get_allocation(db, allocation_id)
+    if not allocation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resource allocation not found"
+        )
+
+    await check_resource_permissions(allocation.event_id, user_id)
+
     success = await resource_crud.delete_allocation(db, allocation_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource allocation not found or access denied")
@@ -146,11 +167,15 @@ async def delete_allocation(
 @router.patch("/allocations/{allocation_id}/cancel")
 async def cancel_allocation(
         allocation_id: int,
-        db: AsyncSession = Depends(get_db)
+        db: AsyncSession = Depends(get_db),
+        user_id: int = Depends(get_current_user_id)
 ):
     allocation=await resource_crud.get_allocation(db, allocation_id)
     if not allocation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource allocation not found")
+
+    await check_resource_permissions(allocation.event_id, user_id)
+
     if allocation.status in [AllocationStatus.COMPLETED, AllocationStatus.CANCELLED]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot cancel completed and cancelled allocation")
 
