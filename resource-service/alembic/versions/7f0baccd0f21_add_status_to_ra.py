@@ -1,8 +1,8 @@
-"""init
+"""add status to RA
 
-Revision ID: 6c0998f04281
+Revision ID: 7f0baccd0f21
 Revises: 
-Create Date: 2026-04-01 15:16:05.824146
+Create Date: 2026-04-13 15:48:31.404320
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '6c0998f04281'
+revision: str = '7f0baccd0f21'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -28,11 +28,13 @@ def upgrade() -> None:
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('quantity', sa.Integer(), nullable=False),
     sa.Column('cost_per_hour', sa.Float(), nullable=True),
+    sa.Column('event_id', sa.Integer(), nullable=False),
     sa.Column('owner_id', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_resources_event_id'), 'resources', ['event_id'], unique=False)
     op.create_index(op.f('ix_resources_id'), 'resources', ['id'], unique=False)
     op.create_index(op.f('ix_resources_name'), 'resources', ['name'], unique=False)
     op.create_index(op.f('ix_resources_owner_id'), 'resources', ['owner_id'], unique=False)
@@ -40,10 +42,10 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('resource_id', sa.Integer(), nullable=False),
     sa.Column('task_id', sa.Integer(), nullable=True),
-    sa.Column('event_id', sa.Integer(), nullable=True),
+    sa.Column('event_id', sa.Integer(), nullable=False),
     sa.Column('owner_id', sa.Integer(), nullable=False),
     sa.Column('quantity_used', sa.Integer(), nullable=False),
-    sa.Column('status', sa.Enum('AVAILABLE', 'BOOKED', 'MAINTENANCE', name='resourcestatus'), nullable=False),
+    sa.Column('status', sa.Enum('PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED', name='allocationstatus'), nullable=False),
     sa.Column('date_start', sa.DateTime(timezone=True), nullable=False),
     sa.Column('date_end', sa.DateTime(timezone=True), nullable=False),
     sa.ForeignKeyConstraint(['resource_id'], ['resources.id'], ),
@@ -67,5 +69,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_resources_owner_id'), table_name='resources')
     op.drop_index(op.f('ix_resources_name'), table_name='resources')
     op.drop_index(op.f('ix_resources_id'), table_name='resources')
+    op.drop_index(op.f('ix_resources_event_id'), table_name='resources')
     op.drop_table('resources')
     # ### end Alembic commands ###
