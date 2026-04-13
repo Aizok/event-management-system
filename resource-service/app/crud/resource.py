@@ -70,13 +70,15 @@ class ResourceCRUD:
         if not resource:
             raise ValueError("Resource not found")
 
+        event_id=resource.event_id
+
         # Если есть task_id, то есть ли такая task
         if obj_in.task_id is not None:
             task=await get_task(obj_in.task_id)
             if not task:
                 raise ValueError("Task not found")
             # Проверка, чтобы event_id у RA совпадал с event_id таски
-            if task["event_id"] != obj_in.event_id:
+            if task["event_id"] != event_id:
                 raise ValueError("Task does not belong to this event")
             if task["status"] == "DONE":
                 raise ValueError("Cannot allocate to completed task")
@@ -130,6 +132,18 @@ class ResourceCRUD:
         return result.scalars().all()
 
 
+    async def get_allocations_by_event_ids(self, db: AsyncSession, event_ids: List[int] ,skip: int=0, limit: int=100):
+        query=(
+            select(ResourceAllocation)
+            .where(ResourceAllocation.event_id.in_(event_ids))
+            .order_by(ResourceAllocation.resource_id)
+            .offset(skip)
+            .limit(limit)
+        )
+        result=await db.execute(query)
+        allocations=result.scalars().all()
+        return allocations
+
     async def update_allocation(self, db: AsyncSession, allocation_id: int, obj_in: ResourceAllocationUpdate)->Optional[ResourceAllocation]:
         db_obj=await self.get_allocation(db, allocation_id)
         if not db_obj:
@@ -142,7 +156,7 @@ class ResourceCRUD:
         start=obj_in.date_start or db_obj.date_start
         end=obj_in.date_end or db_obj.date_end
         resource_id=obj_in.resource_id or db_obj.resource_id
-        event_id=obj_in.event_id or db_obj.event_id
+        event_id=db_obj.event_id
         task_id=obj_in.task_id if obj_in.task_id is not None else db_obj.task_id
 
         # Корректность временного интервала

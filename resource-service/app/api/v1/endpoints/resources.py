@@ -4,12 +4,14 @@ from typing import List
 
 from ....core.database import get_db
 from ....core.security import get_current_user_id
-from ....core.permissions import check_resource_permissions
+from ....core.permissions import check_resource_permissions, ALLOWED_ROLES
 from ....crud.resource import resource_crud
 from ....models.resource import AllocationStatus
 from ....schemas.resource import (
     ResourceCreate, ResourceUpdate, ResourceResponse,
     ResourceAllocationCreate, ResourceAllocationUpdate, ResourceAllocationResponse)
+from ....core.auth_client import is_admin
+from ....core.event_client import get_user_events_with_roles
 
 
 router = APIRouter()
@@ -32,8 +34,19 @@ async def read_resources(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    resources=await resource_crud.get_multi_resources(db, skip=skip, limit=limit)
-    return resources
+    if await is_admin(user_id):
+        return await resource_crud.get_multi_resources(db, skip, limit)
+
+    events=await get_user_events_with_roles(user_id)
+    allowed_event_ids = [
+        e["event_id"]
+        for e in events
+        if e["role"] in ALLOWED_ROLES
+    ]
+    if not allowed_event_ids:
+        return []
+
+    return await resource_crud.ge
 
 
 @router.get("/{resource_id}", response_model=ResourceResponse)
@@ -100,8 +113,19 @@ async def read_allocations(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    allocations=await resource_crud.get_multi_allocations(db, skip=skip, limit=limit)
-    return allocations
+    if await is_admin(user_id):
+        return await resource_crud.get_multi_allocations(db, skip, limit)
+
+    events=await get_user_events_with_roles(user_id)
+    allowed_event_ids = [
+        e["event_id"]
+        for e in events
+        if e["role"] in ALLOWED_ROLES
+    ]
+    if not allowed_event_ids:
+        return []
+    return await resource_crud.get_allocations_by_event_ids(db, allowed_event_ids, skip, limit)
+
 
 
 @router.get("/allocations/{allocation_id}", response_model=ResourceAllocationResponse)
@@ -131,7 +155,7 @@ async def update_allocation(
             detail="Resource allocation not found"
         )
 
-    await check_resource_permissions(allocation_in.event_id, user_id)
+    await check_resource_permissions(allocation.event_id, user_id)
 
     try:
         updated=await resource_crud.update_allocation(db, allocation_id, allocation_in)

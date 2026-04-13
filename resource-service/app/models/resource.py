@@ -31,6 +31,7 @@ class Resource(Base):
 
     cost_per_hour: Mapped[float | None]=mapped_column(Float, nullable=True)
 
+    event_id: Mapped[int]=mapped_column(Integer, nullable=False, index=True)
     owner_id: Mapped[int]=mapped_column(Integer, nullable=False, index=True)
 
     created_at:Mapped[DateTime]=mapped_column(DateTime(timezone=True), server_default=func.now())
