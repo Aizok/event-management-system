@@ -37,6 +37,19 @@ class ResourceCRUD:
         return result.scalars().all()
 
 
+    async def get_resources_by_event_ids(self, db: AsyncSession, event_ids: List[int] ,skip: int=0, limit: int=100):
+        query=(
+            select(Resource)
+            .where(Resource.event_id.in_(event_ids))
+            .order_by(Resource.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        result=await db.execute(query)
+        resources=result.scalars().all()
+        return resources
+
+
     async def update_resource(self, db: AsyncSession, resource_id: int, obj_in: ResourceUpdate) -> Optional[Resource]:
         db_obj=await self.get_resource(db, resource_id)
         if not db_obj:
@@ -59,16 +72,16 @@ class ResourceCRUD:
 
 
     """Allocations"""
-    async def create_allocation(self, db: AsyncSession, obj_in: ResourceAllocationCreate, owner_id: int) -> ResourceAllocation:
+    async def create_allocation(self, db: AsyncSession, obj_in: ResourceAllocationCreate, owner_id: int, resource: Resource) -> ResourceAllocation:
 
         # Проверка корректности временного диапазона
         if obj_in.date_start >= obj_in.date_end:
             raise ValueError("Invalid time range")
 
         # Проверка существования ресурса
-        resource=await self.get_resource(db, obj_in.resource_id)
-        if not resource:
-            raise ValueError("Resource not found")
+        # resource=await self.get_resource(db, obj_in.resource_id)
+        # if not resource:
+        #     raise ValueError("Resource not found")
 
         event_id=resource.event_id
 
@@ -103,7 +116,8 @@ class ResourceCRUD:
         # Создание
         db_obj=ResourceAllocation(
             **obj_in.model_dump(),
-            owner_id=owner_id
+            owner_id=owner_id,
+            event_id=event_id
         )
 
         now=datetime.now(timezone.utc)
@@ -155,7 +169,7 @@ class ResourceCRUD:
         # Получение нужных значений, если они не переданы, берём старые
         start=obj_in.date_start or db_obj.date_start
         end=obj_in.date_end or db_obj.date_end
-        resource_id=obj_in.resource_id or db_obj.resource_id
+        resource_id=db_obj.resource_id
         event_id=db_obj.event_id
         task_id=obj_in.task_id if obj_in.task_id is not None else db_obj.task_id
 

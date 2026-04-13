@@ -23,6 +23,7 @@ async def create_resource(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
+    await check_resource_permissions(resource_in.event_id, user_id)
     resource=await resource_crud.create_resource(db=db, obj_in=resource_in, owner_id=user_id)
     return resource
 
@@ -46,7 +47,7 @@ async def read_resources(
     if not allowed_event_ids:
         return []
 
-    return await resource_crud.ge
+    return await resource_crud.get_resources_by_event_ids(db, allowed_event_ids, skip, limit)
 
 
 @router.get("/{resource_id}", response_model=ResourceResponse)
@@ -58,6 +59,7 @@ async def read_resource(
     resource = await resource_crud.get_with_allocations(db, resource_id)
     if not resource:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
+    await check_resource_permissions(resource.event_id, user_id)
     return resource
 
 
@@ -68,10 +70,18 @@ async def update_resource(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    resource=await resource_crud.update_resource(db, resource_id, resource_in)
+    resource = await resource_crud.get_resource(db, resource_id)
     if not resource:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
-    return resource
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resource not found"
+        )
+
+    await check_resource_permissions(resource.event_id, user_id)
+
+    updated=await resource_crud.update_resource(db, resource_id, resource_in)
+
+    return updated
 
 
 @router.delete("/{resource_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -80,6 +90,15 @@ async def delete_resource(
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
+    resource = await resource_crud.get_resource(db, resource_id)
+    if not resource:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resource not found"
+        )
+
+    await check_resource_permissions(resource.event_id, user_id)
+
     success = await resource_crud.delete_resource(db, resource_id)
     if not success:
         raise HTTPException(
@@ -95,9 +114,13 @@ async def create_allocation(
         db: AsyncSession=Depends(get_db),
         user_id: int =Depends(get_current_user_id)
 ):
-    await check_resource_permissions(allocation_in.event_id, user_id)
+    resource=await resource_crud.get_resource(db, allocation_in.resource_id)
+    if not resource:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
+
+    await check_resource_permissions(resource.event_id, user_id)
     try:
-        allocation=await resource_crud.create_allocation(db=db, obj_in=allocation_in, owner_id=user_id)
+        allocation=await resource_crud.create_allocation(db=db, obj_in=allocation_in, owner_id=user_id, resource=resource)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
