@@ -4,6 +4,7 @@ from typing import List
 from ....core.database import get_db
 from ....core.security import get_current_user_id, get_current_service
 from ....crud.event_participant import event_participant_crud
+from ....crud.event import event_crud
 from ....schemas.event_participant import EventParticipantCreate, EventParticipantResponse
 from ....schemas.event import TokenData
 from ....models.event_participant import ParticipantRole, EventParticipant
@@ -26,6 +27,13 @@ async def internal_get_participant(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not allowed"
+        )
+
+    event=await event_crud.get(db, event_id)
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found"
         )
 
     participant = await event_participant_crud.get_participant(db, event_id, participant_user_id)
