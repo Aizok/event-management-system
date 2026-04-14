@@ -1,13 +1,20 @@
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from ..core.auth_client import is_admin
-from ..core.event_client import get_user_role_in_event
+from ..core.event_client import get_user_role_in_event, event_exists
 
 ALLOWED_ROLES={"owner", "organizer"}
 
 async def check_resource_permissions(event_id: int, user_id: int):
     if await is_admin(user_id):
         return
+
+    exists=await event_exists(event_id)
+    if not exists:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found"
+        )
 
     role = await get_user_role_in_event(event_id, user_id)
 

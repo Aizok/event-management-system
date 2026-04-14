@@ -9,7 +9,7 @@ from ....schemas.event import EventCreate, EventUpdate, EventResponse, TokenData
 from ....core.permissions import check_event_permissions, ALLOWED_ROLES
 from ....core.auth_client import is_admin
 
-ALLOWED_SERVICES={"task-service"}
+ALLOWED_SERVICES={"task-service", "resource-service"}
 
 router = APIRouter()
 
@@ -34,6 +34,27 @@ async def get_user_events(
 async def create_event(event_in: EventCreate, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)):
     event=await event_crud.create(db=db, obj_in=event_in, owner_id=user_id)
     return event
+
+
+@router.get("/internal/events/{event_id}")
+async def internal_get_event(
+        event_id: int,
+        db: AsyncSession = Depends(get_db),
+        service: TokenData = Depends(get_current_service)
+):
+    if service.service_name not in ALLOWED_SERVICES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed"
+        )
+
+    event = await event_crud.get(db, event_id)
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found"
+        )
+    return {"id": event.id}
 
 
 @router.get("/", response_model=List[EventResponse])

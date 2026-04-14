@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     VERSION: str="1.0.0"
 
     SERVICE_SECRET_EVENT: str
+    SERVICE_SECRET_RESOURCE: str
 
     class Config:
         env_file=".env"
