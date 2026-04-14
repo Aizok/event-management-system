@@ -4,12 +4,9 @@ from typing import List
 from ....core.database import get_db
 from ....core.security import get_current_user_id, get_current_service
 from ....crud.event_participant import event_participant_crud
-from ....crud.event import event_crud
 from ....schemas.event_participant import EventParticipantCreate, EventParticipantResponse
 from ....schemas.event import TokenData
 from ....models.event_participant import ParticipantRole, EventParticipant
-from ....models.event import Event
-from ....api.dependencies.event import get_event_or_404
 from ....api.dependencies.participant import get_current_participant, get_current_owner
 
 ALLOWED_SERVICES={"task-service", "resource-service"}
@@ -18,10 +15,10 @@ ALLOWED_SERVICES={"task-service", "resource-service"}
 router = APIRouter()
 
 
-@router.get("/internal/{event_id}/participants/{participant_user_id}", response_model=EventParticipantResponse)
+@router.get("/internal/{event_id}/participants/{participant_user_id}")
 async def internal_get_participant(
         event_id: int,
-        user_id: int,
+        participant_user_id: int,
         db: AsyncSession = Depends(get_db),
         service: TokenData = Depends(get_current_service)
 ):
@@ -31,7 +28,7 @@ async def internal_get_participant(
             detail="Not allowed"
         )
 
-    participant = await event_participant_crud.get_participant(db, event_id, user_id)
+    participant = await event_participant_crud.get_participant(db, event_id, participant_user_id)
     if not participant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
