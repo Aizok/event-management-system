@@ -30,12 +30,6 @@ async def get_user_events(
     return {"events": events}
 
 
-@router.post("/", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
-async def create_event(event_in: EventCreate, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)):
-    event=await event_crud.create(db=db, obj_in=event_in, owner_id=user_id)
-    return event
-
-
 @router.get("/internal/events/{event_id}")
 async def internal_get_event(
         event_id: int,
@@ -55,6 +49,13 @@ async def internal_get_event(
             detail="Event not found"
         )
     return {"id": event.id}
+
+
+@router.post("/", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
+async def create_event(event_in: EventCreate, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    event=await event_crud.create(db=db, obj_in=event_in, owner_id=user_id)
+    return event
+
 
 
 @router.get("/", response_model=List[EventResponse])
