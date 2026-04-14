@@ -5,10 +5,10 @@ from .api.v1.endpoints import resources
 from .core.config import settings
 from .core.database import AsyncSessionLocal
 from .crud.resource import resource_crud
+from .core.events import start_resource_consumer, consumer
 import logging
 
 logger=logging.getLogger(__name__)
-
 
 async def allocation_status_worker():
     while True:
@@ -20,14 +20,33 @@ async def allocation_status_worker():
         await asyncio.sleep(60)
 
 
+# Глобальная переменная для управления consumer
+consumer_background_task=None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"{settings.PROJECT_NAME} starting")
+
     worker_task=asyncio.create_task(allocation_status_worker())
 
+    global consumer_background_task
+    consumer_task=asyncio.create_task(start_resource_consumer())
+    consumer_background_task=consumer_task
+
     yield
+
     worker_task.cancel()
-    print("Service stopped")
+
+    if consumer_background_task:
+        consumer_background_task.cancel()
+        try:
+            await consumer_background_task
+        except asyncio.CancelledError:
+            logger.info("Resource consumer task cancelled")
+
+    await consumer.close()
+    logger.info("Resource Service Consumer stopped")
 
 
 app=FastAPI(

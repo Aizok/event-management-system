@@ -8,10 +8,12 @@ class EventType(str, Enum):
     TASK_CREATED = "TaskCreated"
     TASK_UPDATED = "TaskUpdated"
     TASK_ASSIGNED = "TaskAssigned"
+    TASK_RESCHEDULED = "TaskRescheduled"
     TASK_COMPLETED = "TaskCompleted"
     EVENT_CREATED = "EventCreated"
     RESOURCE_ALLOCATED = "ResourceAllocated"
     RESOURCE_RELEASED = "ResourceReleased"
+
 
 class BaseEvent(BaseModel):
     event_type: EventType
@@ -30,8 +32,5 @@ class TaskAssigned(BaseEvent):
 class TaskUpdated(BaseEvent):
     event_type: EventType = EventType.TASK_UPDATED
 
-class EventCreated(BaseEvent):
-    event_type: EventType = EventType.EVENT_CREATED
-
-class TaskCompleted(BaseEvent):
-    event_type: EventType = EventType.TASK_COMPLETED
+class TaskRescheduled(BaseEvent):
+    event_type: EventType = EventType.TASK_RESCHEDULED

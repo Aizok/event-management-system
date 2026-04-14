@@ -5,6 +5,7 @@ from ..models.task import Task, TaskStatus
 from ..models.task_history import TaskHistory
 from ..schemas.task import TaskCreate, TaskUpdate
 from ..crud.task_dependency import task_dependency_crud
+from ..core.events import publish_task_rescheduled
 from datetime import datetime, timezone, timedelta
 
 START_GRACE_PERIOD = timedelta(minutes=5)
@@ -245,6 +246,7 @@ class TaskCRUD:
 
                 await db.flush()
                 await self.sync_blocked_status(db, child)
+                await publish_task_rescheduled(db, child.id)
                 # Рекурсивно вниз
                 await self.recalculate_schedule(db, child_id)
 

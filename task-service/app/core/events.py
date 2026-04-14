@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.events.producer import EventProducer
-from shared.events.schemas.events import TaskCreated, TaskUpdated, TaskAssigned
+from shared.events.schemas.events import TaskCreated, TaskUpdated, TaskAssigned, TaskRescheduled
 from .database import get_db
 from ..crud.task import task_crud
 from ..models.task import TaskStatus, TaskPriority
@@ -86,3 +86,25 @@ async def publish_task_updated(
             logger.info(
                 f"TaskAssigned (id={task_id}): assignee={changes['assignee_id']}"
             )
+
+
+async def publish_task_rescheduled(db: AsyncSession, task_id: int):
+    task=await task_crud.get(db, task_id)
+    if not task:
+        return
+
+    event=TaskRescheduled(
+        source_service="task-service",
+        source_entity_id=task_id,
+        data={
+            "task_id": task.id,
+            "event_id": task.event_id,
+            "start_time": task.start_time,
+            "end_time": task.end_time
+        }
+    )
+
+    await producer.publish(event)
+    logger.info(
+        f"TaskRescheduled (id={task_id})"
+    )

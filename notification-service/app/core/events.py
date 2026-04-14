@@ -1,15 +1,9 @@
 import logging
-from typing import Optional, Dict, Any
-from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import Depends, HTTPException, status
-
 from .user_client import get_user_email
 from .email import send_email
 from ..crud.notification import notification_crud
 from ..schemas.notification import NotificationCreate, NotificationType, NotificationStatus
-
 from .database import AsyncSessionLocal
-
 from shared.events.consumer import EventConsumer
 from shared.events.schemas.events import BaseEvent, TaskCreated, TaskAssigned, TaskUpdated
 
