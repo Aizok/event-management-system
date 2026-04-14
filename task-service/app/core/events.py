@@ -99,8 +99,8 @@ async def publish_task_rescheduled(db: AsyncSession, task_id: int):
         data={
             "task_id": task.id,
             "event_id": task.event_id,
-            "start_time": task.start_time,
-            "end_time": task.end_time
+            "start_time": task.start_time.isoformat(),
+            "end_time": task.end_time.isoformat()
         }
     )
 

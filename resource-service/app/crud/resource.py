@@ -7,6 +7,7 @@ from ..models.resource import Resource, ResourceAllocation, AllocationStatus
 from ..schemas.resource import ResourceCreate, ResourceUpdate, ResourceAllocationCreate, ResourceAllocationUpdate
 from ..core.task_client import get_task
 
+
 class ResourceCRUD:
     async def create_resource(self, db: AsyncSession, obj_in: ResourceCreate, owner_id: int) -> Resource:
         db_obj=Resource(
@@ -158,6 +159,16 @@ class ResourceCRUD:
         allocations=result.scalars().all()
         return allocations
 
+
+    async def get_allocations_by_task(self, db: AsyncSession, task_id: int):
+        query=select(ResourceAllocation).where(
+            ResourceAllocation.task_id == task_id,
+            ResourceAllocation.status.in_([AllocationStatus.PLANNED, AllocationStatus.ACTIVE])
+        )
+        result=await db.execute(query)
+        return result.scalars().all()
+
+
     async def update_allocation(self, db: AsyncSession, allocation_id: int, obj_in: ResourceAllocationUpdate)->Optional[ResourceAllocation]:
         db_obj=await self.get_allocation(db, allocation_id)
         if not db_obj:
@@ -288,6 +299,49 @@ class ResourceCRUD:
         )
         await db.execute(query)
         await db.commit()
+
+
+    async def shift_allocation_to_fit_task(
+            self,
+            db: AsyncSession,
+            allocation: ResourceAllocation,
+            task_start,
+            task_end
+    ):
+        if isinstance(task_start, str):
+            task_start=datetime.fromisoformat(task_start.replace("Z", "+00:00"))
+        if isinstance(task_end, str):
+            task_end=datetime.fromisoformat(task_end.replace("Z", "+00:00"))
+
+        original_duration=allocation.date_end - allocation.date_start
+
+        # Если полностью вне задачи, то отменяем
+        if allocation.date_start > task_end or allocation.date_end < task_start:
+            allocation.status = AllocationStatus.CANCELLED
+            await db.flush()
+            return
+        # Если allocation раньше начала task, то надо сдвинуть вправо
+        if allocation.date_start < task_start:
+            allocation.date_start=task_start
+            allocation.date_end=task_start+original_duration
+        # Если конец использования allocation выходит за конец таски, то обрезаем
+        if allocation.date_end > task_end:
+            allocation.date_end=task_end
+        # На всякий, если некорректный интервал, то отменяем
+        if allocation.date_start >= allocation.date_end:
+            allocation.status = AllocationStatus.CANCELLED
+            await db.flush()
+            return
+
+        now=datetime.now(timezone.utc)
+        if allocation.date_end <= now:
+            allocation.status = AllocationStatus.COMPLETED
+        elif allocation.date_start <= now < allocation.date_end:
+            allocation.status = AllocationStatus.ACTIVE
+        else:
+            allocation.status = AllocationStatus.PLANNED
+
+        await db.flush()
 
 
 resource_crud=ResourceCRUD()
