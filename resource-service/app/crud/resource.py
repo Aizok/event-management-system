@@ -333,6 +333,23 @@ class ResourceCRUD:
             await db.flush()
             return
 
+        # Если после сдвига возник конфликт, то переводим в статус CANCELLED
+        overlaps = await self.get_overlapping_allocations(
+            db,
+            allocation.resource_id,
+            allocation.date_start,
+            allocation.date_end,
+            exclude_id=allocation.id
+        )
+        used_quantity = sum(a.quantity_used for a in overlaps)
+        total = used_quantity + allocation.quantity_used
+
+        resource = await self.get_resource(db, allocation.resource_id)
+        if total > resource.quantity:
+            allocation.status = AllocationStatus.CANCELLED
+            await db.flush()
+            return
+
         now=datetime.now(timezone.utc)
         if allocation.date_end <= now:
             allocation.status = AllocationStatus.COMPLETED

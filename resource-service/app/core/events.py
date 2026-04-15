@@ -21,7 +21,7 @@ async def handle_task_rescheduled(event: TaskRescheduled):
 
     async with AsyncSessionLocal() as db:
         allocations=await resource_crud.get_allocations_by_task(db, task_id)
-
+        allocations=sorted(allocations, key=lambda a: a.date_start)
         for alloc in allocations:
             try:
                 await resource_crud.shift_allocation_to_fit_task(
