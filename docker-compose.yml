@@ -118,6 +118,27 @@ services:
     cpus: 0.5
     mem_limit: 512m
 
+  postgres_ai:
+    image: postgres:15-alpine
+    container_name: postgres_ai
+    environment:
+      POSTGRES_DB: ai_db
+      POSTGRES_USER: ai_user
+      POSTGRES_PASSWORD: ai_password
+    ports:
+      - "5439:5432"
+    volumes:
+      - postgres_ai_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ai_user -d ai_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+    cpus: 0.5
+    mem_limit: 512m
+
   redis_cache:
     image: redis:7-alpine
     container_name: redis_cache
@@ -330,6 +351,32 @@ services:
     cpus: 0.5
     mem_limit: 512m
 
+  ai-assistant:
+    build:
+      context: .
+      dockerfile: ai-assistant/Dockerfile
+    container_name: ai_assistant
+    ports:
+      - "8007:8007"
+    environment:
+      - DATABASE_URL=postgresql://ai_user:ai_password@postgres_ai:5432/ai_db
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    depends_on:
+      postgres_ai:
+        condition: service_healthy
+    volumes:
+      - ./shared:/app/shared:ro
+      - ./ai-assistant:/app
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8007/health" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - app-network
+
   nginx:
     image: nginx:alpine
     container_name: api-gateway
@@ -357,6 +404,7 @@ volumes:
   postgres_tasks_data:
   postgres_resources_data:
   postgres_notifications_data:
+  postgres_ai_data:
   redis_data:
   rabbitmq_data:
 
