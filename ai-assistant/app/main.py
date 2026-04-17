@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from .core.config import settings
 from .api.v1.endpoints import ai
+from .core.config import settings
 
 
 @asynccontextmanager
@@ -13,8 +13,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="AI Assistant Service - Event Management System",
-    version="1.0.0",
-    description="AI microservice",
+    version=settings.VERSION,
+    description="AI assistant microservice",
     lifespan=lifespan
 )
 

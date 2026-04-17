@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     SERVICE_SECRET_USER: str
     SERVICE_SECRET_EVENT: str
     SERVICE_SECRET_RESOURCE: str
-
+    SERVICE_SECRET_AI: str
     DEBUG: bool=True
     PROJECT_NAME: str="Auth Service"
     VERSION: str = "1.0.0"

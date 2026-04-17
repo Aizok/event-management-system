@@ -8,7 +8,13 @@ router = APIRouter()
 @router.post("/generate", response_model=GenerateResponse)
 async def generate_plan(request: GenerateRequest):
     try:
-        result = await generate_event_plan(request.description)
+        result = await generate_event_plan(
+            description=request.description,
+            event_id=request.event_id
+        )
         return result
     except Exception:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="AI generation failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="AI generation failed"
+        )

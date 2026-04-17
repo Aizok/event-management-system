@@ -1,4 +1,8 @@
 from openai import OpenAI
+from openai.types.chat import (
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+)
 from .config import settings
 
 
@@ -10,12 +14,21 @@ client = OpenAI(
 
 async def generate_completion(prompt: str) -> str:
     try:
+        system_message: ChatCompletionSystemMessageParam = {
+            "role": "system",
+            "content": "You are an expert event planner assistant.",
+        }
+
+        user_message: ChatCompletionUserMessageParam = {
+            "role": "user",
+            "content": prompt,
+        }
+
+        messages = [system_message, user_message]
+
         response = client.chat.completions.create(
             model=settings.AI_MODEL,
-            messages=[
-                {"role": "system", "content": "You are an expert event planner assistant."},
-                {"role": "user", "content": prompt},
-            ],
+            messages=messages,
             temperature=0.3,
         )
 

@@ -11,7 +11,7 @@ from ....core.auth_client import is_admin
 from ....core.event_client import get_user_events_with_roles
 from ....core.event_client import get_user_role_in_event
 
-ALLOWED_SERVICES={"resource-service"}
+ALLOWED_SERVICES={"resource-service", "ai-assistant"}
 
 router = APIRouter()
 
@@ -95,6 +95,28 @@ async def get_task_internal(
         "end_time": task.end_time,
         "event_id": task.event_id
     }
+
+
+@router.post("/internal/tasks", status_code=status.HTTP_201_CREATED)
+async def create_task_internal(
+        task_in: TaskCreate,
+        db: AsyncSession=Depends(get_db),
+        service: TokenData=Depends(get_current_service)
+):
+    if service.service_name not in ALLOWED_SERVICES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed"
+        )
+
+    task=await task_crud.create(
+        db=db,
+        obj_in=task_in,
+        owner_id=None
+    )
+
+    await publish_task_created(db, task.id)
+    return task
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

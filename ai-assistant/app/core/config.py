@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
 
+    TASK_SERVICE_URL: str = "http://task-service:8004"
+    SERVICE_SECRET_AI: str
+
     class Config:
         env_file=".env"
         extra = "ignore"
