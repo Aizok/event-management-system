@@ -1,4 +1,5 @@
 import json
+import asyncio
 from ..core.openai_client import generate_completion
 from .prompt_builder import build_event_prompt
 from ..core.task_client import create_task
@@ -16,18 +17,17 @@ async def generate_event_plan(description: str, event_id: int):
 
     tasks = data.get("tasks", [])
 
-    created_tasks = []
-
-    for task in tasks:
-        task_payload = {
-            "title": task["title"],
-            "description": task.get("description"),
-            "estimated_hours": task.get("estimated_hours"),
+    tasks_to_create = [
+        create_task({
+            "title": t["title"],
+            "description": t.get("description"),
+            "estimated_hours": t.get("estimated_hours"),
             "event_id": event_id
-        }
+        })
+        for t in tasks
+    ]
 
-        created = await create_task(task_payload)
-        created_tasks.append(created)
+    created_tasks = await asyncio.gather(*tasks_to_create)
 
     return {
         "event_name": data.get("event_name"),

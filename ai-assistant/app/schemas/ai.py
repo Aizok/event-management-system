@@ -9,16 +9,17 @@ class GenerateRequest(BaseModel):
     event_id: int
 
 
-class TaskItem(BaseModel):
+class CreatedTask(BaseModel):
+    id: int
     title: str
-    description: Optional[str]
-    estimated_hours: Optional[int]
+    description: str | None
+    estimated_hours: int | None
+    event_id: int
 
 
 class GenerateResponse(BaseModel):
     event_name: str
-    tasks: List[dict]
-
+    tasks: List[CreatedTask]
 
 
 class TokenRole(str, enum.Enum):

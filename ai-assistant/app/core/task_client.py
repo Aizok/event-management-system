@@ -1,6 +1,7 @@
 import httpx
 from fastapi import HTTPException, status
 from .auth_client import get_service_token
+from .config import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -10,9 +11,9 @@ async def create_task(task_data: dict):
     async with httpx.AsyncClient(timeout=7.0) as client:
         try:
             token = await get_service_token()
-
+            url = f"{settings.TASK_SERVICE_URL}/api/tasks/internal/tasks"
             resp = await client.post(
-                "http://task-service:8004/api/tasks/internal/tasks",
+                url,
                 json=task_data,
                 headers={"Authorization": f"Bearer {token}"}
             )

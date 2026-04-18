@@ -24,6 +24,8 @@ Return ONLY JSON in this format:
   ]
 }}
 
+Do not include explanations, comments, or text outside JSON.
+
 Event description:
 {description}
 """
