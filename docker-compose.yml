@@ -376,6 +376,8 @@ services:
     restart: unless-stopped
     networks:
       - app-network
+    cpus: 0.5
+    mem_limit: 512m
 
   nginx:
     image: nginx:alpine
