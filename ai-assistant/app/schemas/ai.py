@@ -1,3 +1,5 @@
+import enum
+
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
@@ -16,3 +18,19 @@ class TaskItem(BaseModel):
 class GenerateResponse(BaseModel):
     event_name: str
     tasks: List[dict]
+
+
+
+class TokenRole(str, enum.Enum):
+    ADMIN = "admin"
+    ORGANIZER = "organizer"
+    EXECUTOR = "executor"
+    VIEWER = "viewer"
+    SERVICE = "service"
+
+
+class TokenData(BaseModel):
+    role: TokenRole
+    user_id: int | None = None
+    email: str | None = None
+    service_name: str | None = None

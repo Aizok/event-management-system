@@ -5,7 +5,7 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str
     OPENAI_BASE_URL: str = "https://openrouter.ai/api/v1"
-    AI_MODEL: str = "openrouter/free"
+    AI_MODEL: str
 
     PROJECT_NAME: str="AI Assistant Service"
     VERSION: str="1.0.0"
