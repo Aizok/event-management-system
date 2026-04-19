@@ -11,7 +11,7 @@ from ..core.auth_client import get_service_token
 import logging
 
 logger=logging.getLogger(__name__)
-MAX_TASKS = 20
+MAX_TASKS = 30
 
 def extract_json(text: str) -> str:
     match = re.search(r"\{.*?}", text, re.DOTALL)
