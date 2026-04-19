@@ -11,7 +11,7 @@ from ..core.auth_client import get_service_token
 import logging
 
 logger=logging.getLogger(__name__)
-
+MAX_TASKS = 20
 
 def extract_json(text: str) -> str:
     match = re.search(r"\{.*?}", text, re.DOTALL)
@@ -43,6 +43,9 @@ async def generate_event_plan(description: str, event_id: int):
 
     if not validated_tasks:
         raise ValueError("AI returned no valid tasks")
+
+    validated_tasks = validated_tasks[:MAX_TASKS]
+
 
     token = await get_service_token()
 
