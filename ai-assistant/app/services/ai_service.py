@@ -8,7 +8,9 @@ from .prompt_builder import build_event_prompt
 from ..core.task_client import create_task
 from ..schemas.ai import TaskItem, CreatedTask
 from ..core.auth_client import get_service_token
+import logging
 
+logger=logging.getLogger(__name__)
 
 
 def extract_json(text: str) -> str:
@@ -59,6 +61,7 @@ async def generate_event_plan(description: str, event_id: int):
     created_tasks = []
     for r in results:
         if isinstance(r, Exception):
+            logger.error(f"Task creation failed: {r}")
             continue
         try:
             created_tasks.append(CreatedTask(**r))

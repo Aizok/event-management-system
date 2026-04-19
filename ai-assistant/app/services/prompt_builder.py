@@ -1,4 +1,22 @@
+def sanitize_input(text: str) -> str:
+    forbidden_patterns = [
+        "ignore previous instructions",
+        "system:",
+        "assistant:",
+        "you are chatgpt",
+        "act as",
+    ]
+
+    lowered = text.lower()
+
+    for pattern in forbidden_patterns:
+        if pattern in lowered:
+            raise ValueError("Potential prompt injection detected")
+
+    return text
+
 def build_event_prompt(description: str) -> str:
+    description=sanitize_input(description)
     return f"""
 You are an event planning assistant.
 
