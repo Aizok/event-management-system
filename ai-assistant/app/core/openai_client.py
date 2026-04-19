@@ -1,3 +1,4 @@
+import asyncio
 from openai import OpenAI
 from openai.types.chat import (
     ChatCompletionSystemMessageParam,
@@ -9,6 +10,7 @@ from .config import settings
 client = OpenAI(
     api_key=settings.OPENAI_API_KEY,
     base_url=settings.OPENAI_BASE_URL,
+    timeout=15.0
 )
 
 
@@ -26,7 +28,8 @@ async def generate_completion(prompt: str) -> str:
 
         messages = [system_message, user_message]
 
-        response = client.chat.completions.create(
+        response = await asyncio.to_thread(
+            client.chat.completions.create,
             model=settings.AI_MODEL,
             messages=messages,
             temperature=0.3,

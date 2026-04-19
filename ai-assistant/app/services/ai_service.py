@@ -7,10 +7,12 @@ from ..core.openai_client import generate_completion
 from .prompt_builder import build_event_prompt
 from ..core.task_client import create_task
 from ..schemas.ai import TaskItem, CreatedTask
+from ..core.auth_client import get_service_token
+
 
 
 def extract_json(text: str) -> str:
-    match = re.search(r"\{.*?\}", text, re.DOTALL)
+    match = re.search(r"\{.*?}", text, re.DOTALL)
     if not match:
         raise ValueError("No JSON found in AI response")
     return match.group(0)
@@ -40,13 +42,15 @@ async def generate_event_plan(description: str, event_id: int):
     if not validated_tasks:
         raise ValueError("AI returned no valid tasks")
 
+    token = await get_service_token()
+
     tasks_to_create = [
         create_task({
             "title": t.title,
             "description": t.description,
             "estimated_hours": t.estimated_hours,
             "event_id": event_id
-        })
+        }, token)
         for t in validated_tasks
     ]
 

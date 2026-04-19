@@ -14,7 +14,13 @@ async def generate_plan(request: GenerateRequest, user_id: int = Depends(get_cur
             event_id=request.event_id
         )
         return result
-    except Exception:
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="AI generation failed"

@@ -11,7 +11,7 @@ class GenerateRequest(BaseModel):
 
 class TaskItem(BaseModel):
     """То, что возвращает AI (сырые данные)"""
-    title: str
+    title: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
     estimated_hours: Optional[int] = None
 
