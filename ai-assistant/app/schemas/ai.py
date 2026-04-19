@@ -9,11 +9,18 @@ class GenerateRequest(BaseModel):
     event_id: int
 
 
+class TaskItem(BaseModel):
+    """То, что возвращает AI (сырые данные)"""
+    title: str
+    description: Optional[str] = None
+    estimated_hours: Optional[int] = None
+
+
 class CreatedTask(BaseModel):
     id: int
     title: str
-    description: str | None
-    estimated_hours: int | None
+    description: Optional[str]
+    estimated_hours: Optional[int]
     event_id: int
 
 
