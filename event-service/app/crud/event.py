@@ -16,7 +16,7 @@ class EventCRUD:
         await db.commit()
         await db.refresh(db_obj)
 
-        await event_participant_crud.add_participant(
+        await event_participant_crud.create_participant(
             db,
             event_id=db_obj.id,
             user_id=owner_id,

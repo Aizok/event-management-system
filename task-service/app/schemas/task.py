@@ -14,7 +14,9 @@ class TaskCreate(TaskBase):
     event_id: int
     assignee_id: Optional[int] = None
     priority: TaskPriority=TaskPriority.MEDIUM
-    deadline: Optional[datetime]= None
+    deadline: datetime
+    start_time: datetime
+    end_time: datetime
 
 
 class TaskUpdate(BaseModel):
@@ -23,6 +25,9 @@ class TaskUpdate(BaseModel):
     status: Optional[TaskStatus]=None
     priority: Optional[TaskPriority]=None
     assignee_id: Optional[int] = None
+    deadline: Optional[datetime] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
 
 
 class TaskResponse(BaseModel):
@@ -32,7 +37,11 @@ class TaskResponse(BaseModel):
     status: TaskStatus
     priority: TaskPriority
     created_at: datetime
-    deadline: Optional[datetime]
+    deadline: datetime
+    start_time: datetime
+    end_time: datetime
+    actual_start_time: Optional[datetime]
+    actual_end_time: Optional[datetime]
     updated_at: Optional[datetime]
     event_id: int
     owner_id: int
