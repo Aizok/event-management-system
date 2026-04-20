@@ -27,6 +27,7 @@ class CreatedTask(BaseModel):
 class GenerateResponse(BaseModel):
     event_name: str
     tasks: List[CreatedTask]
+    errors: Optional[List[str]] = Field(default=None)
 
 
 class TokenRole(str, enum.Enum):
