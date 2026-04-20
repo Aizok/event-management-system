@@ -12,8 +12,8 @@ class GenerateRequest(BaseModel):
 class TaskItem(BaseModel):
     """То, что возвращает AI (сырые данные)"""
     title: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = None
-    estimated_hours: Optional[int] = None
+    description: str | None = Field(default=None, max_length=2000)
+    estimated_hours: int | None = Field(default=None, ge=1, le=100)
 
 
 class CreatedTask(BaseModel):
@@ -27,7 +27,7 @@ class CreatedTask(BaseModel):
 class GenerateResponse(BaseModel):
     event_name: str
     tasks: List[CreatedTask]
-    errors: Optional[List[str]] = Field(default=None)
+    errors: List[str] = Field(default_factory=list)
 
 
 class TokenRole(str, enum.Enum):

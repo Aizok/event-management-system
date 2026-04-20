@@ -15,22 +15,27 @@ MAX_DESCRIPTION = 2100
 MAX_AI_RESPONSE = 20000
 semaphore=asyncio.Semaphore(5)
 
-def extract_json(text: str) -> str:
-    brace_stack = 0
-    start = None
 
-    for i, ch in enumerate(text):
-        if ch == "{":
-            if brace_stack == 0:
-                start = i
-            brace_stack += 1
-        elif ch == "}":
-            if brace_stack > 0:
-                brace_stack -= 1
-            if brace_stack == 0 and start is not None:
-                return text[start:i + 1]
+def extract_json(text: str) -> dict:
+    import json
 
-    raise ValueError("No valid JSON object found")
+    text = text.strip()
+
+    start = text.find("{")
+    if start == -1:
+        raise ValueError("No JSON found")
+    text = text[start:]
+    decoder = json.JSONDecoder()
+
+    obj, idx = decoder.raw_decode(text)
+
+    # проверка мусора после JSON
+    rest = text[start + idx:].strip()
+    if rest and not rest.startswith(("{", "[")):
+        # допустимы только пустота или продолжение JSON
+        pass
+
+    return obj
 
 
 async def create_task_limited(task_payload: dict, token: str):
@@ -46,8 +51,7 @@ async def generate_event_plan(description: str, event_id: int):
     raw_response = raw_response[:MAX_AI_RESPONSE]
 
     try:
-        clean_json = extract_json(raw_response)
-        data = json.loads(clean_json)
+        data = extract_json(raw_response)
         if not isinstance(data, dict):
             raise ValueError("AI returned invalid structure")
     except Exception:
@@ -109,5 +113,5 @@ async def generate_event_plan(description: str, event_id: int):
     return {
         "event_name": event_name,
         "tasks": created_tasks,
-        "errors": errors if errors else None
+        "errors": errors
     }
