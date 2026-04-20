@@ -26,10 +26,23 @@ class EventConsumer:
         self.consume_task = None
 
     async def connect(self):
-        self.connection=await aio_pika.connect_robust(self.rabbitmq_url)
-        self.channel=await self.connection.channel()
-        await self.channel.set_qos(prefetch_count=1)
-        print(f"Consumer подключён к {self.rabbitmq_url }")
+        retries=10
+        delay=5
+
+        for attempt in range(retries):
+            try:
+                print(f"[Consumer] Connecting to RabbitMQ (attempt {attempt + 1})")
+                self.connection=await aio_pika.connect_robust(self.rabbitmq_url)
+                self.channel=await self.connection.channel()
+                await self.channel.set_qos(prefetch_count=1)
+                print(f"Consumer подключён к {self.rabbitmq_url }")
+                return
+            except Exception as e:
+                if attempt == retries - 1:
+                    raise
+
+                await asyncio.sleep(delay)
+
 
     async def consume(
             self,
