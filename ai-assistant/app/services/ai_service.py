@@ -17,25 +17,17 @@ semaphore=asyncio.Semaphore(5)
 
 
 def extract_json(text: str) -> dict:
-    import json
-
-    text = text.strip()
-
-    start = text.find("{")
-    if start == -1:
-        raise ValueError("No JSON found")
-    text = text[start:]
     decoder = json.JSONDecoder()
 
-    obj, idx = decoder.raw_decode(text)
+    for i, ch in enumerate(text):
+        if ch in "{[":
+            try:
+                obj, _ = decoder.raw_decode(text[i:])
+                return obj
+            except json.JSONDecodeError:
+                continue
 
-    # проверка мусора после JSON
-    rest = text[start + idx:].strip()
-    if rest and not rest.startswith(("{", "[")):
-        # допустимы только пустота или продолжение JSON
-        pass
-
-    return obj
+    raise ValueError("No valid JSON found in AI response")
 
 
 async def create_task_limited(task_payload: dict, token: str):

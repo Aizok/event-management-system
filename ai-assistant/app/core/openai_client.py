@@ -5,7 +5,7 @@ from openai.types.chat import (
     ChatCompletionUserMessageParam,
 )
 from .config import settings
-
+from ..services.prompt_builder import SYSTEM_GUARD
 
 client = OpenAI(
     api_key=settings.OPENAI_API_KEY,
@@ -14,11 +14,12 @@ client = OpenAI(
 )
 
 
+
 async def generate_completion(prompt: str) -> str:
     try:
         system_message: ChatCompletionSystemMessageParam = {
             "role": "system",
-            "content": "You are an expert event planner assistant.",
+            "content": SYSTEM_GUARD,
         }
 
         user_message: ChatCompletionUserMessageParam = {
