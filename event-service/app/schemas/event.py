@@ -8,8 +8,8 @@ from ..models.event import EventStatus
 class EventBase(BaseModel):
     title: str=Field(..., min_length=3, max_length=255)
     description: Optional[str] = None
-    start_date: datetime
-    end_date: datetime
+    start_time: datetime
+    end_time: datetime
     location: Optional[str]=None
     budget: float = 0.0
 
@@ -19,8 +19,8 @@ class EventCreate(EventBase):
 class EventUpdate(BaseModel):
     title: Optional[str]=None
     description: Optional[str]=None
-    start_date: Optional[datetime]=None
-    end_date: Optional[datetime]=None
+    start_time: Optional[datetime]=None
+    end_time: Optional[datetime]=None
     location: Optional[str] = None
     budget: Optional[float] = None
     status: Optional[EventStatus]=None

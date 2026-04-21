@@ -22,8 +22,8 @@ class Event(Base):
     title:Mapped[str]=mapped_column(String(255), nullable=False)
     description:Mapped[str | None]=mapped_column(Text, nullable=True)
 
-    start_date: Mapped[datetime]=mapped_column(DateTime(timezone=True), nullable=False)
-    end_date: Mapped[datetime]=mapped_column(DateTime(timezone=True), nullable=False)
+    start_time: Mapped[datetime]=mapped_column(DateTime(timezone=True), nullable=False)
+    end_time: Mapped[datetime]=mapped_column(DateTime(timezone=True), nullable=False)
 
     location:Mapped[str |None]=mapped_column(String(255), nullable=True)
     budget:Mapped[float]=mapped_column(Float, default=0.0)

@@ -48,7 +48,11 @@ async def internal_get_event(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Event not found"
         )
-    return {"id": event.id}
+    return {
+        "id": event.id,
+        "start_time": event.start_time,
+        "end_time": event.end_time
+    }
 
 
 @router.post("/", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
