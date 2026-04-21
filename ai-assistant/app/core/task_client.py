@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 async def create_task(task_data: dict, token: str):
-    async with httpx.AsyncClient(timeout=7.0) as client:
+    async with httpx.AsyncClient(timeout=15.0) as client:
         try:
             url = f"{settings.TASK_SERVICE_URL}/api/tasks/internal/tasks"
             resp = await client.post(

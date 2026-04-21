@@ -50,10 +50,12 @@ def build_task_payload_with_timing(
     def distribute(task_list, window_start, window_end):
         if not task_list:
             return []
-        if window_end<=window_start:
-            window_start=window_end - timedelta(hours=len(task_list) or 1)
-            if window_start<now:
-                window_start=now
+        if window_start < now:
+            window_start = now
+
+        if window_end <= window_start:
+            window_start = now
+            window_end = now + timedelta(hours=len(task_list) or 1)
 
         window=(window_end-window_start).total_seconds()
         step=window/max(len(task_list), 1)
@@ -164,7 +166,8 @@ async def generate_event_plan(description: str, event_id: int, user_id: int):
             continue
         try:
             created_tasks.append(CreatedTask(**r))
-        except ValidationError:
+        except ValidationError as e:
+            logger.error(f"Invalid task response: {r}, error: {e}")
             continue
 
     event_name = data.get("event_name")

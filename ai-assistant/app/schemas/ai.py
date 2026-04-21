@@ -27,7 +27,9 @@ class TaskItem(BaseModel):
     def normalize_timing(cls, v):
         if isinstance(v, str):
             v=v.strip().lower()
-            return TaskTiming(v)
+            if v in {"before", "during", "after"}:
+                return TaskTiming(v)
+            return TaskTiming.BEFORE
         return v
 
 
@@ -35,7 +37,7 @@ class CreatedTask(BaseModel):
     id: int
     title: str
     description: Optional[str]
-    estimated_hours: Optional[int]
+    # estimated_hours: Optional[int]
     event_id: int
 
 
