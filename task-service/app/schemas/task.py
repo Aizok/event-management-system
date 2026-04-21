@@ -19,6 +19,10 @@ class TaskCreate(TaskBase):
     end_time: datetime
 
 
+class InternalTaskCreate(TaskCreate):
+    owner_id: int
+
+
 class TaskUpdate(BaseModel):
     title: Optional[str]=None
     description: Optional[str]=None

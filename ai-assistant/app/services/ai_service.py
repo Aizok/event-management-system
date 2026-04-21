@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from ..core.openai_client import generate_completion
 from .prompt_builder import build_event_prompt
-from ..schemas.ai import TaskItem, CreatedTask
+from ..schemas.ai import TaskItem, CreatedTask, TaskTiming
 from ..core.task_client import create_task
 from ..core.event_client import get_event
 from ..core.auth_client import get_service_token
@@ -36,18 +36,25 @@ def build_task_payload_with_timing(
         tasks: list[TaskItem],
         event_start: datetime,
         event_end: datetime,
-        event_id: int
+        event_id: int,
+        user_id: int
 ):
     now=datetime.now(timezone.utc)
 
-    before_tasks=[t for t in tasks if t.timing == "before"]
-    during_tasks=[t for t in tasks if t.timing == "during"]
-    after_tasks=[t for t in tasks if t.timing == "after"]
+    before_tasks=[t for t in tasks if t.timing == TaskTiming.BEFORE]
+    during_tasks=[t for t in tasks if t.timing == TaskTiming.DURING]
+    after_tasks=[t for t in tasks if t.timing == TaskTiming.AFTER]
 
     result=[]
+
     def distribute(task_list, window_start, window_end):
         if not task_list:
             return []
+        if window_end<=window_start:
+            window_start=window_end - timedelta(hours=len(task_list) or 1)
+            if window_start<now:
+                window_start=now
+
         window=(window_end-window_start).total_seconds()
         step=window/max(len(task_list), 1)
 
@@ -74,15 +81,15 @@ def build_task_payload_with_timing(
             "title": t.title,
             "description": t.description,
             "event_id": event_id,
-            "start_time": start,
-            "end_time": end,
-            "deadline": end + timedelta(hours=2),
+            "start_time": start.isoformat(),
+            "end_time": end.isoformat(),
+            "deadline": (end + timedelta(hours=2)).isoformat(),
             "priority": "medium",
+            "owner_id": user_id,
             "assignee_id": None
         }
         for (t, start, end) in result
     ]
-
 
 
 async def create_task_limited(task_payload: dict, token: str):
@@ -90,7 +97,7 @@ async def create_task_limited(task_payload: dict, token: str):
         return await create_task(task_payload, token)
 
 
-async def generate_event_plan(description: str, event_id: int):
+async def generate_event_plan(description: str, event_id: int, user_id: int):
     description = description[:MAX_DESCRIPTION]
     prompt = build_event_prompt(description)
 
@@ -136,7 +143,8 @@ async def generate_event_plan(description: str, event_id: int):
         validated_tasks,
         event_start,
         event_end,
-        event_id
+        event_id,
+        user_id
     )
 
     token = await get_service_token()

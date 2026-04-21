@@ -11,7 +11,8 @@ async def generate_plan(request: GenerateRequest, user_id: int = Depends(get_cur
     try:
         result = await generate_event_plan(
             description=request.description,
-            event_id=request.event_id
+            event_id=request.event_id,
+            user_id=user_id
         )
         return result
     except ValueError as e:

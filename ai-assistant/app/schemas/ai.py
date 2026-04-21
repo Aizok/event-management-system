@@ -1,6 +1,6 @@
 import enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 
 
@@ -21,6 +21,14 @@ class TaskItem(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     estimated_hours: int | None = Field(default=None, ge=1, le=100)
     timing: TaskTiming = TaskTiming.BEFORE
+
+    @field_validator("timing", mode="before")
+    @classmethod
+    def normalize_timing(cls, v):
+        if isinstance(v, str):
+            v=v.strip().lower()
+            return TaskTiming(v)
+        return v
 
 
 class CreatedTask(BaseModel):

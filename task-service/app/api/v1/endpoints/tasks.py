@@ -4,7 +4,7 @@ from typing import List
 from ....core.database import get_db
 from ....core.security import get_current_user_id, get_current_service
 from ....crud.task import task_crud
-from ....schemas.task import TaskCreate, TaskUpdate, TaskResponse, TokenData
+from ....schemas.task import TaskCreate, TaskUpdate, TaskResponse, TokenData, InternalTaskCreate
 from ....core.events import publish_task_created, publish_task_updated
 from ....core.permissions import check_task_permissions, ALLOWED_ROLES
 from ....core.auth_client import is_admin
@@ -99,7 +99,7 @@ async def get_task_internal(
 
 @router.post("/internal/tasks", status_code=status.HTTP_201_CREATED)
 async def create_task_internal(
-        task_in: TaskCreate,
+        task_in: InternalTaskCreate,
         db: AsyncSession=Depends(get_db),
         service: TokenData=Depends(get_current_service)
 ):
@@ -112,7 +112,7 @@ async def create_task_internal(
     task=await task_crud.create(
         db=db,
         obj_in=task_in,
-        owner_id=None
+        owner_id=task_in.owner_id
     )
 
     await publish_task_created(db, task.id)
