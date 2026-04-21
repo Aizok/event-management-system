@@ -36,6 +36,12 @@ Requirements:
   - title
   - description
   - estimated_hours
+  - timing (one of: "before", "during", "after")
+
+Rules:
+- "before" → tasks that must be done before the event starts
+- "during" → tasks happening during the event
+- "after" → tasks after the event ends
 
 Return ONLY JSON in this format:
 {{
@@ -44,7 +50,8 @@ Return ONLY JSON in this format:
     {{
       "title": "...",
       "description": "...",
-      "estimated_hours": 5
+      "estimated_hours": 5,
+      "timing": "before"
     }}
   ]
 }}

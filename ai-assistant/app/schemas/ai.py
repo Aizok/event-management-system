@@ -9,11 +9,18 @@ class GenerateRequest(BaseModel):
     event_id: int
 
 
+class TaskTiming(str, enum.Enum):
+    BEFORE = "before"
+    DURING = "during"
+    AFTER = "after"
+
+
 class TaskItem(BaseModel):
     """То, что возвращает AI (сырые данные)"""
     title: str = Field(..., min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=2000)
     estimated_hours: int | None = Field(default=None, ge=1, le=100)
+    timing: TaskTiming = TaskTiming.BEFORE
 
 
 class CreatedTask(BaseModel):
