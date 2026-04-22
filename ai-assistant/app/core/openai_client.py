@@ -1,5 +1,5 @@
 import asyncio
-from openai import OpenAI
+from openai import OpenAI, OpenAIError
 from openai.types.chat import (
     ChatCompletionSystemMessageParam,
     ChatCompletionUserMessageParam,
@@ -12,7 +12,6 @@ client = OpenAI(
     base_url=settings.OPENAI_BASE_URL,
     timeout=15.0
 )
-
 
 
 async def generate_completion(prompt: str) -> str:
@@ -39,4 +38,7 @@ async def generate_completion(prompt: str) -> str:
         return response.choices[0].message.content
 
     except Exception as e:
-        raise RuntimeError("AI generation failed") from e
+        error_str=str(e)
+        if "429" in error_str or "rate" in error_str.lower():
+            raise RuntimeError("AI_RATE_LIMIT")
+        raise RuntimeError(f"AI_ERROR {e}")

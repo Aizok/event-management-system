@@ -9,7 +9,7 @@ from ....schemas.event import EventCreate, EventUpdate, EventResponse, TokenData
 from ....core.permissions import check_event_permissions, ALLOWED_ROLES
 from ....core.auth_client import is_admin
 
-ALLOWED_SERVICES={"task-service", "resource-service"}
+ALLOWED_SERVICES={"task-service", "resource-service", "ai-assistant"}
 
 router = APIRouter()
 
