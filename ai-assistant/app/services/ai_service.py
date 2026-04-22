@@ -87,16 +87,15 @@ def build_task_payload_with_timing(
             "end_time": end.isoformat(),
             "deadline": (end + timedelta(hours=2)).isoformat(),
             "priority": "medium",
-            "owner_id": user_id,
             "assignee_id": None
         }
         for (t, start, end) in result
     ]
 
 
-async def create_task_limited(task_payload: dict, token: str):
+async def create_task_limited(task_payload: dict, token: str, owner_id: int):
     async with semaphore:
-        return await create_task(task_payload, token)
+        return await create_task(task_payload, token, owner_id)
 
 
 async def generate_event_plan(description: str, event_id: int, user_id: int):
@@ -151,7 +150,7 @@ async def generate_event_plan(description: str, event_id: int, user_id: int):
 
     token = await get_service_token()
     tasks_to_create=[
-        create_task_limited(payload, token)
+        create_task_limited(payload, token, user_id)
         for payload in payloads
     ]
 
