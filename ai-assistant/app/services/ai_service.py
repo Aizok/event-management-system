@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from ..core.openai_client import generate_completion
 from .prompt_builder import build_event_prompt
-from ..schemas.ai import TaskItem, CreatedTask, TaskTiming
+from ..schemas.ai import TaskItem, CreatedTask, TaskTiming, TaskPriority
 from ..core.task_client import create_task
 from ..core.event_client import get_event
 from ..core.auth_client import get_service_token
@@ -32,12 +32,19 @@ def extract_json(text: str) -> dict:
     raise ValueError("No valid JSON found in AI response")
 
 
+def get_deadline(end, priority):
+    if priority == "high":
+        return end + timedelta(hours=1)
+    if priority == "medium":
+        return end + timedelta(hours=2)
+    return end + timedelta(hours=3)
+
+
 def build_task_payload_with_timing(
         tasks: list[TaskItem],
         event_start: datetime,
         event_end: datetime,
-        event_id: int,
-        user_id: int
+        event_id: int
 ):
     now=datetime.now(timezone.utc)
 
@@ -50,6 +57,17 @@ def build_task_payload_with_timing(
     def distribute(task_list, window_start, window_end):
         if not task_list:
             return []
+
+        priority_order = {
+            TaskPriority.HIGH: 0,
+            TaskPriority.MEDIUM: 1,
+            TaskPriority.LOW: 2
+        }
+
+        sorted_tasks = sorted(
+            task_list,
+            key=lambda task: priority_order.get(task.priority, 1)
+        )
         if window_start < now:
             window_start = now
 
@@ -61,7 +79,7 @@ def build_task_payload_with_timing(
         step=window/max(len(task_list), 1)
 
         items=[]
-        for i, t in enumerate(task_list):
+        for i, t in enumerate(sorted_tasks):
             start=window_start+timedelta(seconds=step*i)
             duration=timedelta(hours=t.estimated_hours or 1)
             end=start+duration
@@ -85,8 +103,8 @@ def build_task_payload_with_timing(
             "event_id": event_id,
             "start_time": start.isoformat(),
             "end_time": end.isoformat(),
-            "deadline": (end + timedelta(hours=2)).isoformat(),
-            "priority": "medium",
+            "deadline": get_deadline(end, t.priority.value).isoformat(),
+            "priority": t.priority.value,
             "assignee_id": None
         }
         for (t, start, end) in result
@@ -144,8 +162,7 @@ async def generate_event_plan(description: str, event_id: int, user_id: int):
         validated_tasks,
         event_start,
         event_end,
-        event_id,
-        user_id
+        event_id
     )
 
     token = await get_service_token()

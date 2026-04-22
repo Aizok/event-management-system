@@ -15,12 +15,19 @@ class TaskTiming(str, enum.Enum):
     AFTER = "after"
 
 
+class TaskPriority(str, enum.Enum):
+    LOW="low"
+    MEDIUM="medium"
+    HIGH="high"
+
+
 class TaskItem(BaseModel):
     """То, что возвращает AI (сырые данные)"""
     title: str = Field(..., min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=2000)
     estimated_hours: int | None = Field(default=None, ge=1, le=100)
     timing: TaskTiming = TaskTiming.BEFORE
+    priority: TaskPriority = TaskPriority.MEDIUM
 
     @field_validator("timing", mode="before")
     @classmethod
@@ -32,12 +39,21 @@ class TaskItem(BaseModel):
             return TaskTiming.BEFORE
         return v
 
+    @field_validator("priority", mode="before")
+    @classmethod
+    def normalize_priority(cls, v):
+        if isinstance(v, str):
+            v=v.strip().lower()
+            if v in {"low", "medium", "high"}:
+                return TaskPriority(v)
+            return TaskPriority.MEDIUM
+        return v
+
 
 class CreatedTask(BaseModel):
     id: int
     title: str
     description: Optional[str]
-    # estimated_hours: Optional[int]
     event_id: int
 
 

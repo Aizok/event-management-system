@@ -37,11 +37,27 @@ Requirements:
   - description
   - estimated_hours
   - timing (one of: "before", "during", "after")
-
+  - priority (one of: "low", "medium", "high")
+  
 Rules:
 - "before" → tasks that must be done before the event starts
 - "during" → tasks happening during the event
 - "after" → tasks after the event ends
+
+Priority rules:
+- Not all tasks should be "high"
+- Distribute priorities realistically
+- Usually:
+  - 20–30% high
+  - 50–60% medium
+  - rest low
+- High priority = critical tasks that block the event
+- Medium = important but not critical
+- Low = optional or supporting tasks
+
+High priority tasks should appear earlier within each timing group.
+Each timing group (before, during, after) must contain a mix of priorities.
+Avoid assigning the same priority to all tasks in one group.
 
 Return ONLY JSON in this format:
 {{
@@ -51,7 +67,8 @@ Return ONLY JSON in this format:
       "title": "...",
       "description": "...",
       "estimated_hours": 5,
-      "timing": "before"
+      "timing": "before",
+      "priority": "medium"
     }}
   ]
 }}
