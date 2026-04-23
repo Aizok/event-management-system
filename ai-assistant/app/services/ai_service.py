@@ -15,6 +15,8 @@ logger=logging.getLogger(__name__)
 MAX_TASKS = 30
 MAX_DESCRIPTION = 2100
 MAX_AI_RESPONSE = 20000
+MIN_GAP=0
+MAX_GAP=1800
 semaphore=asyncio.Semaphore(5)
 
 
@@ -77,23 +79,44 @@ def build_task_payload_with_timing(
             logger.warning("Invalid time window, fallback applied")
 
         window_seconds = (window_end - window_start).total_seconds()
-        total_duration_seconds=sum((t.estimated_hours or 1) * 3600 for t in sorted_tasks)
-        free_time=max(window_seconds-total_duration_seconds, 0)
-        gap=free_time/max(len(sorted_tasks)-1, 1)
 
-        items=[]
+        total_duration_seconds = sum(
+            (t.estimated_hours or 1) * 3600 for t in sorted_tasks
+        )
+
+        if total_duration_seconds > window_seconds:
+            scale = window_seconds / total_duration_seconds
+
+            sorted_tasks = [
+                TaskItem(
+                    **t.model_dump(),
+                    estimated_hours=max((t.estimated_hours or 1) * scale, 0.25)
+                )
+                for t in sorted_tasks
+            ]
+
+            total_duration_seconds = window_seconds
+
+        free_time = max(window_seconds - total_duration_seconds, 0)
+        gap = free_time / max(len(sorted_tasks) - 1, 1)
+        gap = max(MIN_GAP, min(gap, MAX_GAP))
+        # минимум 0, максимум 30 минут
+
         current_time=window_start
 
-        for t in sorted_tasks:
+        items = []
+        for i, t in enumerate(sorted_tasks):
             duration=timedelta(hours=t.estimated_hours or 1)
             start=current_time
 
-            if start+duration>window_end:
-                start=max(window_start, window_end-duration)
+            if start + duration > window_end:
+                start = window_end - duration
+                start = max(start, window_start)
             end=start+duration
 
             items.append((t, start, end))
-            current_time=end+timedelta(seconds=gap)
+            if i<len(sorted_tasks)-1:
+                current_time=end+timedelta(seconds=gap)
         return items
 
     result+=distribute(before_tasks, now, event_start)

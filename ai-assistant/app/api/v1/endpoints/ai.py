@@ -25,17 +25,11 @@ async def generate_plan(request: GenerateRequest, user_id: int = Depends(get_cur
 
         if "AI_RATE_LIMIT" in str(e):
             raise HTTPException(
-
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-
                 detail="AI service is rate limited. Try again later."
-
             )
-
+    
         raise HTTPException(
-
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-
-            detail="AI generation failed"
-
+            detail=f"AI generation failed {e}"
         )
