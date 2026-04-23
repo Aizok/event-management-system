@@ -76,18 +76,24 @@ def build_task_payload_with_timing(
             window_end = now + timedelta(hours=len(task_list) or 1)
             logger.warning("Invalid time window, fallback applied")
 
+        window_seconds = (window_end - window_start).total_seconds()
+        total_duration_seconds=sum((t.estimated_hours or 1) * 3600 for t in sorted_tasks)
+        free_time=max(window_seconds-total_duration_seconds, 0)
+        gap=free_time/max(len(sorted_tasks)-1, 1)
+
         items=[]
         current_time=window_start
 
         for t in sorted_tasks:
-            start=current_time
             duration=timedelta(hours=t.estimated_hours or 1)
+            start=current_time
+
             if start+duration>window_end:
                 start=max(window_start, window_end-duration)
             end=start+duration
 
             items.append((t, start, end))
-            current_time=start+duration
+            current_time=end+timedelta(seconds=gap)
         return items
 
     result+=distribute(before_tasks, now, event_start)
