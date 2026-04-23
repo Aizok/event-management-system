@@ -84,7 +84,7 @@ def build_task_payload_with_timing(
         items=[]
         current_time=window_start
 
-        for t in sorted_tasks:
+        for i, t in enumerate(sorted_tasks):
             duration=timedelta(hours=t.estimated_hours or 1)
             start=current_time
 
@@ -93,7 +93,8 @@ def build_task_payload_with_timing(
             end=start+duration
 
             items.append((t, start, end))
-            current_time=end+timedelta(seconds=gap)
+            if i<len(sorted_tasks)-1:
+                current_time=end+timedelta(seconds=gap)
         return items
 
     result+=distribute(before_tasks, now, event_start)
