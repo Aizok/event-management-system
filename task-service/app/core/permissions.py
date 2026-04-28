@@ -10,14 +10,16 @@ async def check_task_permissions(task, user_id: int):
 
     role=await get_user_role_in_event(task.event_id, user_id)
 
-    if task.assignee_id == user_id:
+    if role in ALLOWED_ROLES:
         return
+    if role == "executor":
+        if task.assignee_id==user_id:
+            return
 
-    if role not in ALLOWED_ROLES:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Not enough permissions"
+    )
 
 
 async def check_task_manage_permissions(task, user_id: int):
