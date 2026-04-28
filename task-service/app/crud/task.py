@@ -95,6 +95,21 @@ class TaskCRUD:
         return tasks
 
 
+    async def get_by_event_and_assignee(self, db, event_id: int, user_id: int):
+        query = select(Task).where(
+            Task.event_id == event_id,
+            Task.assignee_id == user_id
+        ).order_by(desc(Task.created_at))
+
+        result = await db.execute(query)
+        tasks = result.scalars().all()
+
+        for task in tasks:
+            task.is_late_start = is_late_start(task)
+
+        return tasks
+
+
     async def get_by_event_ids(self, db: AsyncSession, event_ids: List[int] ,skip: int=0, limit: int=100):
         query = (
             select(Task)

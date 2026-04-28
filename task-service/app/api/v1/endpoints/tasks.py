@@ -144,9 +144,8 @@ async def read_tasks_by_event(
         db: AsyncSession=Depends(get_db),
         user_id: int = Depends(get_current_user_id)
 ):
-    tasks=await task_crud.get_by_event(db, event_id)
     if await is_admin(user_id):
-        return tasks
+        return await task_crud.get_by_event(db, event_id)
 
     events=await get_user_events_with_roles(user_id)
 
@@ -156,12 +155,18 @@ async def read_tasks_by_event(
     }
     role = roles_map.get(event_id)
 
+    if role is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+
     # Для организаторов все задачи
     if role in ALLOWED_ROLES:
-        return tasks
+        return await task_crud.get_by_event(db, event_id)
     # Для исполнителей только его
 
-    return [t for t in tasks if t.assignee_id == user_id]
+    return await task_crud.get_by_event_and_assignee(db, event_id, user_id)
 
 
 @router.put("/{task_id}", response_model=TaskResponse)
