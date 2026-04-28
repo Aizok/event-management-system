@@ -5,7 +5,7 @@ from ....core.database import get_db
 from ....core.security import get_current_user_id, get_current_service
 from ....crud.event import event_crud
 from ....schemas.event import EventCreate, EventUpdate, EventResponse, TokenData
-from ....core.permissions import check_event_permissions, ALLOWED_ROLES
+from ....core.permissions import check_event_permissions, ALLOWED_ROLES, check_event_read_permissions
 from ....core.auth_client import is_admin
 
 ALLOWED_SERVICES={"task-service", "resource-service", "ai-assistant"}
@@ -70,7 +70,6 @@ async def read_events(skip: int = 0, limit: int = 100, db: AsyncSession = Depend
     allowed_event_ids = [
         e["event_id"]
         for e in events
-        if e["role"] in ALLOWED_ROLES
     ]
     if not allowed_event_ids:
         return []
@@ -85,7 +84,7 @@ async def read_event(event_id: int, db: AsyncSession = Depends(get_db), user_id:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Event not found"
         )
-    await check_event_permissions(db, event.id, user_id)
+    await check_event_read_permissions(db, event.id, user_id)
     return event
 
 

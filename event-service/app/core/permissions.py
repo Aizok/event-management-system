@@ -23,3 +23,22 @@ async def check_event_permissions(db, event_id: int, user_id: int):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
         )
+
+async def check_event_read_permissions(db, event_id: int, user_id: int):
+    if await is_admin(user_id):
+        return
+
+    result = await db.execute(
+        select(EventParticipant.role)
+        .where(
+            EventParticipant.event_id == event_id,
+            EventParticipant.user_id == user_id
+        )
+    )
+    role = result.scalar_one_or_none()
+
+    if role is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
