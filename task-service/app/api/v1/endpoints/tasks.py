@@ -6,7 +6,7 @@ from ....core.security import get_current_user_id, get_current_service
 from ....crud.task import task_crud
 from ....schemas.task import TaskCreate, TaskUpdate, TaskResponse, TokenData
 from ....core.events import publish_task_created, publish_task_updated
-from ....core.permissions import check_task_permissions, ALLOWED_ROLES
+from ....core.permissions import check_task_permissions, ALLOWED_ROLES, check_task_manage_permissions
 from ....core.auth_client import is_admin
 from ....core.event_client import get_user_events_with_roles
 from ....core.event_client import get_user_role_in_event
@@ -207,7 +207,7 @@ async def delete_task(task_id: int, db: AsyncSession = Depends(get_db), user_id:
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
-    await check_task_permissions(task, user_id)
+    await check_task_manage_permissions(task, user_id)
     success = await task_crud.delete(db, task_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
