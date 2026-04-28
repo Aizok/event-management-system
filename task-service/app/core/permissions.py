@@ -12,9 +12,8 @@ async def check_task_permissions(task, user_id: int):
 
     if role in ALLOWED_ROLES:
         return
-    if role == "executor":
-        if task.assignee_id==user_id:
-            return
+    if role == "executor"and task.assignee_id==user_id:
+        return
 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
