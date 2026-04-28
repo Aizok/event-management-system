@@ -84,6 +84,17 @@ class TaskCRUD:
         return tasks
 
 
+    async def get_by_assignee(self, db: AsyncSession, user_id: int):
+        query=select(Task).where(Task.assignee_id == user_id)
+        result=await db.execute(query)
+        tasks=result.scalars().all()
+
+        for task in tasks:
+            task.is_late_start=is_late_start(task)
+
+        return tasks
+
+
     async def get_by_event_ids(self, db: AsyncSession, event_ids: List[int] ,skip: int=0, limit: int=100):
         query = (
             select(Task)
@@ -108,21 +119,29 @@ class TaskCRUD:
         if not update_data:
             return db_obj
 
-        new_status = update_data.get("status")
+        is_executor=db_obj.assignee_id == user_id
+        if is_executor:
+            allowed_fields={"status"}
+            forbidden = set(update_data.keys()) - allowed_fields
+            if forbidden:
+                raise ValueError("Executors can only change status")
 
-        if new_status in [TaskStatus.IN_PROGRESS, TaskStatus.DONE]:
+        new_status = update_data.get("status", db_obj.status)
+
+        if "status" in update_data and new_status in [TaskStatus.IN_PROGRESS, TaskStatus.DONE]:
             has_blockers = await self.has_unfinished_parents(db, task_id)
             if has_blockers:
                 raise ValueError("Task is blocked by unfinished dependencies")
 
         now=datetime.now(timezone.utc)
-        if new_status==TaskStatus.IN_PROGRESS:
-            if db_obj.actual_start_time is None:
-                db_obj.actual_start_time=now
+        if "status" in update_data:
+            if new_status==TaskStatus.IN_PROGRESS:
+                if db_obj.actual_start_time is None:
+                    db_obj.actual_start_time=now
 
-        if new_status==TaskStatus.DONE:
-            if db_obj.actual_end_time is None:
-                db_obj.actual_end_time=now
+            if new_status==TaskStatus.DONE:
+                if db_obj.actual_end_time is None:
+                    db_obj.actual_end_time=now
 
         new_start = update_data.get("start_time", db_obj.start_time)
         new_end = update_data.get("end_time", db_obj.end_time)

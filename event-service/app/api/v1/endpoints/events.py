@@ -4,7 +4,6 @@ from typing import List
 from ....core.database import get_db
 from ....core.security import get_current_user_id, get_current_service
 from ....crud.event import event_crud
-from ....crud.event_participant import event_participant_crud
 from ....schemas.event import EventCreate, EventUpdate, EventResponse, TokenData
 from ....core.permissions import check_event_permissions, ALLOWED_ROLES
 from ....core.auth_client import is_admin

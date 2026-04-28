@@ -8,6 +8,9 @@ async def check_task_permissions(task, user_id: int, roles_map=None):
     if await is_admin(user_id):
         return
 
+    if task.assignee_id == user_id:
+        return
+
     if roles_map is not None:
         role=roles_map.get(task.event_id)
     else:

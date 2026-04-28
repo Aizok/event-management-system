@@ -10,6 +10,7 @@ from ....core.permissions import check_task_permissions, ALLOWED_ROLES
 from ....core.auth_client import is_admin
 from ....core.event_client import get_user_events_with_roles
 from ....core.event_client import get_user_role_in_event
+from ....utils.collections import unique_by_id
 
 ALLOWED_SERVICES={"resource-service", "ai-assistant"}
 
@@ -53,6 +54,8 @@ async def read_tasks(
     if await is_admin(user_id):
         return await task_crud.get_multi(db, skip, limit)
 
+    tasks_assigned=await task_crud.get_by_assignee(db, user_id)
+
     events=await get_user_events_with_roles(user_id)
     allowed_event_ids = [
         e["event_id"]
@@ -61,13 +64,15 @@ async def read_tasks(
     ]
 
     if not allowed_event_ids:
-        return []
-    return await task_crud.get_by_event_ids(
+        return tasks_assigned
+
+    tasks_by_event = await task_crud.get_by_event_ids(
         db,
         allowed_event_ids,
         skip,
         limit
     )
+    return unique_by_id(tasks_by_event+tasks_assigned)
 
 
 @router.get("/internal/tasks/{task_id}")
