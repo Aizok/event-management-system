@@ -43,7 +43,7 @@ async def internal_get_participant(
             detail="Participant not found"
         )
 
-    return {"role" :participant.role}
+    return {"role": participant.role}
 
 
 @router.post("/{event_id}/participants", response_model=EventParticipantResponse)
