@@ -61,8 +61,14 @@ def get_current_user_data(token: str=Depends(oauth2_scheme)) -> TokenData:
 
 
 def get_current_user_id(token_data: TokenData=Depends(get_current_user_data)) -> int:
-    if token_data.role == "service":
+    if token_data.role == TokenRole.SERVICE:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Service token cannot access user endpoint"
         )
+    if token_data.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials"
+        )
+    return token_data.user_id
