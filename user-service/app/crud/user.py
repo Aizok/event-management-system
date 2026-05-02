@@ -7,6 +7,9 @@ from ..schemas.user import UserCreate, UserUpdate
 
 class UserCRUD:
     async def create(self, db: AsyncSession, obj_in: UserCreate, owner_id: int, email: str) -> UserProfile:
+        existing = await self.get_by_auth_user_id(db, owner_id)
+        if existing:
+            return existing
         db_obj = UserProfile(
             **obj_in.dict(),
             auth_user_id=owner_id,
@@ -19,6 +22,11 @@ class UserCRUD:
 
     async def get(self, db: AsyncSession, user_id: int) -> Optional[UserProfile]:
         query=select(UserProfile).where(UserProfile.id == user_id)
+        result=await db.execute(query)
+        return result.scalar_one_or_none()
+
+    async def get_by_auth_user_id(self, db: AsyncSession, auth_user_id: int) -> Optional[UserProfile]:
+        query=select(UserProfile).where(UserProfile.auth_user_id == auth_user_id)
         result=await db.execute(query)
         return result.scalar_one_or_none()
 

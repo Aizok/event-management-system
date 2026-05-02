@@ -1,13 +1,13 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from ....schemas.ai import GenerateRequest, GenerateResponse
 from ....services.ai_service import generate_event_plan
-from ....core.security import get_current_user_id
+from ....core.security import get_current_profile_id
 
 router = APIRouter()
 
 
 @router.post("/generate", response_model=GenerateResponse)
-async def generate_plan(request: GenerateRequest, user_id: int = Depends(get_current_user_id)):
+async def generate_plan(request: GenerateRequest, user_id: int = Depends(get_current_profile_id)):
     try:
         result = await generate_event_plan(
             description=request.description,

@@ -4,6 +4,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from .config import settings
 from ..schemas.ai import TokenData, TokenRole
+from .user_client import get_user_profile_id
 import logging
 
 logger=logging.getLogger(__name__)
@@ -68,6 +69,20 @@ def get_current_user_id(token_data: TokenData=Depends(get_current_user_data)) ->
         )
 
     return token_data.user_id
+
+
+async def get_current_profile_id(token_data: TokenData=Depends(get_current_user_data)) -> int:
+    if token_data.role == TokenRole.SERVICE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Service token cannot access user endpoint"
+        )
+    if token_data.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials"
+        )
+    return await get_user_profile_id(token_data.user_id)
 
 
 def get_current_service(token_data: TokenData = Depends(get_current_user_data)):

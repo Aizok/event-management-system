@@ -387,6 +387,9 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/gateway.conf:/etc/nginx/conf.d/gateway.conf:ro
+      - ./nginx/index.html:/usr/share/nginx/html/index.html:ro
+      - ./nginx/styles.css:/usr/share/nginx/html/styles.css:ro
+      - ./nginx/app.js:/usr/share/nginx/html/app.js:ro
       - /dev/null:/etc/nginx/conf.d/default.conf
     depends_on:
       - auth-service

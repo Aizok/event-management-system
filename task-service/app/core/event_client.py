@@ -12,7 +12,7 @@ async def get_user_role_in_event(event_id: int, user_id: int)-> Optional[str]:
     async with httpx.AsyncClient() as client:
         try:
             token=await get_service_token()
-            url=f"http://event-service:8002/api/events/{event_id}/participants/{user_id}"
+            url=f"http://event-service:8002/api/events/internal/{event_id}/participants/{user_id}"
             resp=await client.get(
                 url,
                 headers={"Authorization": f"Bearer {token}"}

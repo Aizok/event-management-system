@@ -2,12 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession 
 from typing import List
 from ....core.database import get_db
-from ....core.security import get_current_user_id, get_current_service
+from ....core.security import get_current_service, get_current_profile_id, get_current_user_data
 from ....crud.task import task_crud
 from ....schemas.task import TaskCreate, TaskUpdate, TaskResponse, TokenData
 from ....core.events import publish_task_created, publish_task_updated
 from ....core.permissions import check_task_permissions, ALLOWED_ROLES, check_task_manage_permissions
-from ....core.auth_client import is_admin
 from ....core.event_client import get_user_events_with_roles
 from ....core.event_client import get_user_role_in_event
 from ....utils.collections import unique_by_id
@@ -20,9 +19,10 @@ router = APIRouter()
 async def create_task(
         task_in: TaskCreate,
         db: AsyncSession = Depends(get_db),
-        user_id: int = Depends(get_current_user_id)
+        user_id: int = Depends(get_current_profile_id),
+        user_data: TokenData = Depends(get_current_user_data)
 ):
-    if not await is_admin(user_id):
+    if user_data.role != "admin":
         events=await get_user_events_with_roles(user_id)
 
         roles_map={
@@ -49,9 +49,10 @@ async def read_tasks(
         skip: int = 0,
         limit: int = 100,
         db: AsyncSession = Depends(get_db),
-        user_id: int = Depends(get_current_user_id)
+        user_id: int = Depends(get_current_profile_id),
+        user_data: TokenData = Depends(get_current_user_data)
 ):
-    if await is_admin(user_id):
+    if user_data.role == "admin":
         return await task_crud.get_multi(db, skip, limit)
 
     tasks_assigned=await task_crud.get_by_assignee(db, user_id)
@@ -129,12 +130,14 @@ async def create_task_internal(
 async def read_task(
         task_id: int,
         db: AsyncSession = Depends(get_db),
-        user_id: int = Depends(get_current_user_id)
+        user_id: int = Depends(get_current_profile_id),
+        user_data: TokenData = Depends(get_current_user_data)
 ):
     task = await task_crud.get(db, task_id)
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-    await check_task_permissions(task, user_id)
+    if user_data.role != "admin":
+        await check_task_permissions(task, user_id)
     return task
 
 
@@ -142,9 +145,10 @@ async def read_task(
 async def read_tasks_by_event(
         event_id: int,
         db: AsyncSession=Depends(get_db),
-        user_id: int = Depends(get_current_user_id)
+        user_id: int = Depends(get_current_profile_id),
+        user_data: TokenData = Depends(get_current_user_data)
 ):
-    if await is_admin(user_id):
+    if user_data.role == "admin":
         return await task_crud.get_by_event(db, event_id)
 
     events=await get_user_events_with_roles(user_id)
@@ -174,13 +178,25 @@ async def update_task(
         task_id: int,
         task_in: TaskUpdate,
         db: AsyncSession = Depends(get_db),
-        user_id: int = Depends(get_current_user_id)
+        user_id: int = Depends(get_current_profile_id),
+        user_data: TokenData = Depends(get_current_user_data)
 ):
     old_task=await task_crud.get(db, task_id)
     if not old_task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
-    await check_task_permissions(old_task, user_id)
+    if user_data.role != "admin":
+        await check_task_permissions(old_task, user_id)
+        role = await get_user_role_in_event(old_task.event_id, user_id)
+        is_executor_assignee = role == "executor" and old_task.assignee_id == user_id
+        if is_executor_assignee:
+            changed_fields = set(task_in.model_dump(exclude_unset=True).keys())
+            allowed_fields = {"status"}
+            if not changed_fields.issubset(allowed_fields):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Executor can only update task status"
+                )
 
     previous_status=old_task.status.value
 
@@ -202,12 +218,18 @@ async def update_task(
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)  
-async def delete_task(task_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+async def delete_task(
+        task_id: int,
+        db: AsyncSession = Depends(get_db),
+        user_id: int = Depends(get_current_profile_id),
+        user_data: TokenData = Depends(get_current_user_data)
+):
     task = await task_crud.get(db, task_id)
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
-    await check_task_manage_permissions(task, user_id)
+    if user_data.role != "admin":
+        await check_task_manage_permissions(task, user_id)
     success = await task_crud.delete(db, task_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")

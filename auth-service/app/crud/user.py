@@ -31,7 +31,6 @@ class AuthCRUD:
         db_user=User(
             email=user_in.email.lower(),
             hashed_password=get_password_hash(user_in.password),
-            full_name=user_in.full_name,
             role=user_in.role,
             status=UserStatus.ACTIVE
         )

@@ -27,6 +27,13 @@ async def create_user_profile(
         db: AsyncSession=Depends(get_db),
         token_data: TokenData = Depends(get_current_user_data)
 ):
+    existing_profile = await user_crud.get_by_auth_user_id(db, token_data.user_id)
+    if existing_profile:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User profile already exists"
+        )
+
     email=await get_user_email_from_auth(
         auth_user_id=token_data.user_id
     )
@@ -76,12 +83,30 @@ async def get_user_internal(
     }
 
 
+@router.get("/internal/by-auth/{auth_user_id}")
+async def get_user_internal_by_auth(
+        auth_user_id: int,
+        db: AsyncSession=Depends(get_db),
+        service: TokenData = Depends(get_current_service)
+):
+    user = await user_crud.get_by_auth_user_id(db, auth_user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with auth_user_id={auth_user_id} not found"
+        )
+    return {
+        "id": user.id,
+        "email": user.email
+    }
+
+
 @router.get("/me", response_model=UserResponse)
 async def read_own_profile(
     db: AsyncSession = Depends(get_db),
     current_user_id: int = Depends(get_current_user_id)
 ):
-    profile = await user_crud.get(db, current_user_id)
+    profile = await user_crud.get_by_auth_user_id(db, current_user_id)
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
