@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from .user_client import get_user_email
 from .email import send_email
 from ..crud.notification import notification_crud
@@ -72,15 +73,19 @@ async def handle_task_assigned(event: TaskAssigned):
 
 
 async def start_notification_consumer():
-    """Запуск consumer в фоне"""
     logger.info("Starting consumer in Notification-service")
-    queue=await consumer.consume(
-        queue_name="notification_events",
-        routing_keys=[
-            "TaskAssigned.task-service"
-        ],
-        callback=handle_task_assigned
-    )
-    logger.info(f"Notification_events consumer started")
-    return queue
+
+    while True:
+        try:
+            await consumer.consume(
+                queue_name="notification_events",
+                routing_keys=["TaskAssigned.task-service"],
+                callback=handle_task_assigned
+            )
+            logger.info("✅ Consumer started")
+            return
+
+        except Exception as e:
+            logger.error(f"Consumer crashed: {e}")
+            await asyncio.sleep(5)
 
