@@ -82,7 +82,7 @@ async def start_notification_consumer():
                 routing_keys=["TaskAssigned.task-service"],
                 callback=handle_task_assigned
             )
-            logger.info("✅ Consumer started")
+            logger.info("Consumer started")
             return
 
         except Exception as e:
