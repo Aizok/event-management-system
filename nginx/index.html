@@ -33,7 +33,10 @@
 
     <main class="content">
       <header class="topbar">
-        <h1 id="screen-title">Обзор</h1>
+        <div class="topbar-head">
+          <h1 id="screen-title">Обзор</h1>
+          <div id="topbar-actions" class="topbar-actions hidden"></div>
+        </div>
         <p id="status-line" class="status-line">Подключение к API...</p>
       </header>
 
@@ -100,7 +103,6 @@
       </section>
 
       <section id="events-screen" class="screen hidden">
-        <button class="btn btn-muted create-toggle-btn" data-target="event-create-panel" type="button">+ Создать мероприятие</button>
         <div id="event-create-panel" class="panel hidden">
           <h2>Новое мероприятие</h2>
           <form id="event-form" class="form-grid">
@@ -120,7 +122,6 @@
       </section>
 
       <section id="tasks-screen" class="screen hidden">
-        <button class="btn btn-muted create-toggle-btn" data-target="task-create-panel" type="button">+ Создать задачу</button>
         <div id="task-create-panel" class="panel hidden">
           <h2>Новая задача</h2>
           <form id="task-form" class="form-grid">
@@ -146,7 +147,6 @@
       </section>
 
       <section id="resources-screen" class="screen hidden">
-        <button class="btn btn-muted create-toggle-btn" data-target="resource-create-panel" type="button">+ Создать ресурс</button>
         <div id="resource-create-panel" class="panel hidden">
           <h2>Новый ресурс</h2>
           <form id="resource-form" class="form-grid">
@@ -171,7 +171,6 @@
       </section>
 
       <section id="ai-screen" class="screen hidden">
-        <button class="btn btn-muted create-toggle-btn" data-target="ai-create-panel" type="button">+ Сгенерировать план</button>
         <div id="ai-create-panel" class="panel hidden">
           <h2>AI генерация базового плана</h2>
           <form id="ai-form" class="form-grid">
@@ -184,6 +183,18 @@
           <h2>Результат генерации</h2>
           <div id="ai-result" class="list"></div>
         </div>
+      </section>
+
+      <section id="event-detail-screen" class="screen hidden">
+        <div id="event-detail-root" class="detail-stack"></div>
+      </section>
+
+      <section id="task-detail-screen" class="screen hidden">
+        <div id="task-detail-root" class="detail-stack"></div>
+      </section>
+
+      <section id="resource-detail-screen" class="screen hidden">
+        <div id="resource-detail-root" class="detail-stack"></div>
       </section>
       </div>
     </main>

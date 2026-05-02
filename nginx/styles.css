@@ -126,6 +126,22 @@ body {
   font-size: 28px;
 }
 
+.topbar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .status-line {
   margin: 4px 0 0;
   color: var(--muted);
@@ -251,8 +267,68 @@ textarea {
   color: var(--text);
 }
 
-.create-toggle-btn {
-  max-width: 240px;
+.btn-inline {
+  width: auto;
+  white-space: nowrap;
+}
+
+.detail-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.detail-actions .btn-danger {
+  border-color: #c44;
+  background: #c44;
+  color: #fff;
+}
+
+.entity-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+}
+
+.entity-link:hover {
+  text-decoration: underline;
+}
+
+.detail-dl {
+  margin: 0;
+  display: grid;
+  gap: 6px 16px;
+  grid-template-columns: auto 1fr;
+  font-size: 14px;
+}
+
+.detail-dl dt {
+  margin: 0;
+  color: var(--muted);
+}
+
+.detail-dl dd {
+  margin: 0;
+}
+
+.deps-block {
+  margin-top: 8px;
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .list {
