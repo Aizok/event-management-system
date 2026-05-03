@@ -79,7 +79,8 @@ async def get_user_internal(
 
     return {
         "id": user.id,
-        "email": user.email
+        "email": user.email,
+        "auth_user_id": user.auth_user_id
     }
 
 
@@ -127,6 +128,19 @@ async def read_public_profiles_by_ids(
         return []
     profiles = await user_crud.get_by_ids(db, unique_ids)
     return profiles
+
+
+@router.get("/public", response_model=List[UserPublicResponse])
+async def read_public_profiles(
+        q: str | None = None,
+        speciality: str | None = None,
+        skip: int = 0,
+        limit: int = 100,
+        db: AsyncSession = Depends(get_db),
+        token_data: TokenData = Depends(get_current_user_data)
+):
+    _ = token_data
+    return await user_crud.search_public(db, q=q, speciality=speciality, skip=skip, limit=limit)
 
 
 @router.get("/{user_id}", response_model=UserPublicResponse)

@@ -44,6 +44,33 @@ class UserCRUD:
         profiles_map = {profile.id: profile for profile in profiles}
         return [profiles_map[user_id] for user_id in user_ids if user_id in profiles_map]
 
+    async def search_public(
+            self,
+            db: AsyncSession,
+            q: Optional[str] = None,
+            speciality: Optional[str] = None,
+            skip: int = 0,
+            limit: int = 100
+    ) -> List[UserProfile]:
+        query = select(UserProfile)
+
+        q_norm = (q or "").strip()
+        speciality_norm = (speciality or "").strip()
+
+        if q_norm:
+            like = f"%{q_norm}%"
+            query = query.where(
+                (UserProfile.first_name.ilike(like)) |
+                (UserProfile.last_name.ilike(like))
+            )
+
+        if speciality_norm:
+            query = query.where(UserProfile.speciality.ilike(f"%{speciality_norm}%"))
+
+        query = query.order_by(UserProfile.first_name, UserProfile.last_name).offset(skip).limit(limit)
+        result = await db.execute(query)
+        return result.scalars().all()
+
     async def update(self, db: AsyncSession, user_id: int, obj_in: UserUpdate) -> Optional[UserProfile]:
         db_obj = await self.get(db, user_id)
         if not db_obj:

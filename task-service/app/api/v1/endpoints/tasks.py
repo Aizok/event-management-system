@@ -197,6 +197,12 @@ async def update_task(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Executor can only update task status"
                 )
+            new_status = getattr(task_in.status, "value", task_in.status)
+            if new_status not in {"in_progress", "done"}:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Executor can only set task status to in_progress or done"
+                )
 
     previous_status=old_task.status.value
 

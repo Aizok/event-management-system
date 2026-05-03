@@ -22,6 +22,7 @@
         <button class="nav-item" data-screen="events">Мероприятия</button>
         <button class="nav-item" data-screen="tasks">Задачи</button>
         <button class="nav-item" data-screen="resources">Ресурсы</button>
+        <button class="nav-item" data-screen="users">Пользователи</button>
         <button class="nav-item" data-screen="ai">AI помощник</button>
       </nav>
 
@@ -168,9 +169,40 @@
             <button class="btn" type="submit">Создать ресурс</button>
           </form>
         </div>
+        <div id="allocation-create-panel" class="panel hidden">
+          <h2>Новое выделение ресурса</h2>
+          <form id="allocation-form" class="form-grid">
+            <select name="event_id" id="allocation-event-select" required>
+              <option value="">Выберите мероприятие</option>
+            </select>
+            <select name="task_id" id="allocation-task-select">
+              <option value="">Без задачи</option>
+            </select>
+            <select name="resource_id" id="allocation-resource-select" required>
+              <option value="">Выберите ресурс</option>
+            </select>
+            <input name="quantity_used" type="number" min="1" value="1" required>
+            <input name="date_start" type="datetime-local" required>
+            <input name="date_end" type="datetime-local" required>
+            <button class="btn" type="submit">Создать выделение</button>
+          </form>
+        </div>
         <div class="panel">
           <h2>Список ресурсов</h2>
           <div id="resources-list" class="list"></div>
+        </div>
+      </section>
+
+      <section id="users-screen" class="screen hidden">
+        <div class="panel">
+          <h2>Пользователи системы</h2>
+          <form id="users-search-form" class="form-grid">
+            <input name="q" id="users-search-q" placeholder="Поиск по имени и фамилии">
+            <input name="speciality" id="users-search-speciality" placeholder="Поиск по специализации">
+            <button class="btn btn-inline" type="submit">Найти</button>
+          </form>
+          <p id="users-mode-hint" class="list-item-meta hidden"></p>
+          <div id="users-list" class="list"></div>
         </div>
       </section>
 

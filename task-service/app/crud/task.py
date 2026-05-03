@@ -140,6 +140,9 @@ class TaskCRUD:
             forbidden = set(update_data.keys()) - allowed_fields
             if forbidden:
                 raise ValueError("Executors can only change status")
+            status_value = getattr(update_data.get("status"), "value", update_data.get("status"))
+            if status_value not in {"in_progress", "done"}:
+                raise ValueError("Executors can only set status to in_progress or done")
 
         new_status = update_data.get("status", db_obj.status)
 

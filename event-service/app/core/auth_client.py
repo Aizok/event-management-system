@@ -40,3 +40,22 @@ async def is_admin(user_id: int)->bool:
         except Exception as e:
             logger.error(f"Failed to check admin status: {e}")
             return False
+
+
+async def get_user_role(user_id: int) -> str | None:
+    async with httpx.AsyncClient() as client:
+        try:
+            token = await get_service_token()
+            resp = await client.get(
+                f"http://auth-service:8001/api/auth/internal/users/{user_id}",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            if resp.status_code == status.HTTP_404_NOT_FOUND:
+                return None
+            resp.raise_for_status()
+            data = resp.json()
+            role = data.get("role")
+            return str(role) if role is not None else None
+        except Exception as e:
+            logger.error(f"Failed to get user role: {e}")
+            return None

@@ -2,13 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from ....core.database import get_db
-from ....core.security import get_current_user_id, get_current_service
+from ....core.security import get_current_user_id, get_current_service, get_current_user_data
 from ....crud.event_participant import event_participant_crud
 from ....crud.event import event_crud
 from ....schemas.event_participant import EventParticipantCreate, EventParticipantResponse
 from ....schemas.event import TokenData
 from ....models.event_participant import ParticipantRole, EventParticipant
 from ....api.dependencies.participant import get_current_participant, get_current_owner
+from ....core.user_client import get_user_profile_id
+from ....core.user_client import get_auth_user_id_by_profile_id
+from ....core.auth_client import get_user_role
 
 ALLOWED_SERVICES={"task-service", "resource-service"}
 
@@ -48,10 +51,28 @@ async def internal_get_participant(
 
 @router.post("/{event_id}/participants", response_model=EventParticipantResponse)
 async def create_participant(
+        event_id: int,
         participant_in: EventParticipantCreate,
         db: AsyncSession=Depends(get_db),
-        current: EventParticipant=Depends(get_current_owner)
+        auth_user_id: int = Depends(get_current_user_id),
+        token_data: TokenData = Depends(get_current_user_data)
 ):
+    event = await event_crud.get(db, event_id)
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found"
+        )
+
+    current_profile_id = await get_user_profile_id(auth_user_id)
+    if token_data.role != "admin":
+        current_participant = await event_participant_crud.get_participant(db, event_id, current_profile_id)
+        if not current_participant or current_participant.role not in {ParticipantRole.OWNER, ParticipantRole.ORGANIZER}:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions"
+            )
+
     # Нельзя добавить второго owner
     if participant_in.role == ParticipantRole.OWNER:
         raise HTTPException(
@@ -61,7 +82,7 @@ async def create_participant(
 
     # Запрет дублирования (нельзя одного и того же добавить как участника несколько раз)
     existing = await event_participant_crud.get_participant(
-        db, current.event_id, participant_in.user_id
+        db, event_id, participant_in.user_id
     )
     if existing:
         raise HTTPException(
@@ -69,10 +90,19 @@ async def create_participant(
             detail="User already participant"
         )
 
+    if participant_in.role == ParticipantRole.ORGANIZER:
+        auth_user_id = await get_auth_user_id_by_profile_id(participant_in.user_id)
+        auth_role = await get_user_role(auth_user_id)
+        if auth_role == "executor":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="System executor cannot be assigned as event organizer"
+            )
+
     try:
         return await event_participant_crud.create_participant(
             db,
-            event_id=current.event_id,
+            event_id=event_id,
             user_id=participant_in.user_id,
             role=participant_in.role
         )

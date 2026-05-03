@@ -9,6 +9,10 @@ const state = {
   detailEventId: null,
   detailBackTarget: null,
   taskCreatePresetEventId: null,
+  usersSearch: { q: "", speciality: "" },
+  usersList: [],
+  participantsModeEventId: null,
+  allocationPreset: { eventId: null, taskId: null, resourceId: null },
   events: [],
   tasks: [],
   resources: []
@@ -37,10 +41,15 @@ const el = {
   eventsList: document.getElementById("events-list"),
   tasksList: document.getElementById("tasks-list"),
   resourcesList: document.getElementById("resources-list"),
+  usersList: document.getElementById("users-list"),
+  usersModeHint: document.getElementById("users-mode-hint"),
   aiResult: document.getElementById("ai-result"),
   protectedContent: document.getElementById("protected-content"),
   taskEventSelect: document.getElementById("task-event-select"),
-  taskAssigneeSelect: document.getElementById("task-assignee-select")
+  taskAssigneeSelect: document.getElementById("task-assignee-select"),
+  allocationEventSelect: document.getElementById("allocation-event-select"),
+  allocationTaskSelect: document.getElementById("allocation-task-select"),
+  allocationResourceSelect: document.getElementById("allocation-resource-select")
 };
 
 function notify(text, isError = false) {
@@ -89,6 +98,10 @@ function clearSession() {
   state.detailEventId = null;
   state.detailBackTarget = null;
   state.taskCreatePresetEventId = null;
+  state.participantsModeEventId = null;
+  state.allocationPreset = { eventId: null, taskId: null, resourceId: null };
+  state.usersList = [];
+  state.usersSearch = { q: "", speciality: "" };
   localStorage.removeItem("ems_token");
   localStorage.removeItem("ems_email");
 }
@@ -160,6 +173,7 @@ function screenName(screenId) {
     events: "Мероприятия",
     tasks: "Задачи",
     resources: "Ресурсы",
+    users: "Пользователи",
     ai: "AI помощник"
   };
   return map[screenId] || "Обзор";
@@ -175,6 +189,14 @@ function setScreen(screenId) {
     return;
   }
   state.currentScreen = screenId;
+  if (screenId === "users" && state.role !== "admin" && state.participantsModeEventId == null) {
+    notify("Страница пользователей доступна из карточки мероприятия", true);
+    state.currentScreen = "events";
+    screenId = "events";
+  }
+  if (screenId !== "users") {
+    state.participantsModeEventId = null;
+  }
   state.detailView = null;
   state.detailEventId = null;
   state.detailBackTarget = null;
@@ -185,6 +207,9 @@ function setScreen(screenId) {
   });
   el.screenTitle.textContent = screenName(screenId);
   updateTopbarActions();
+  if (screenId === "users") {
+    void loadUsers();
+  }
 }
 
 function updateTopbarActions() {
@@ -244,6 +269,24 @@ function updateTopbarActions() {
     }
   });
   container.appendChild(btn);
+  if (state.currentScreen === "resources") {
+    const allocBtn = document.createElement("button");
+    allocBtn.type = "button";
+    allocBtn.className = "btn btn-muted btn-inline";
+    allocBtn.textContent = "+ Создать выделение";
+    allocBtn.addEventListener("click", () => {
+      const panel = document.getElementById("allocation-create-panel");
+      if (panel) {
+        panel.classList.toggle("hidden");
+        if (!panel.classList.contains("hidden")) {
+          populateAllocationEventOptions(state.allocationPreset.eventId);
+          populateAllocationTaskOptions(state.allocationPreset.eventId, state.allocationPreset.taskId);
+          populateAllocationResourceOptions(state.allocationPreset.eventId, state.allocationPreset.resourceId);
+        }
+      }
+    });
+    container.appendChild(allocBtn);
+  }
   container.classList.remove("hidden");
 }
 
@@ -310,6 +353,71 @@ function renderResources() {
   `);
 }
 
+function renderUsers() {
+  const inParticipantMode = state.participantsModeEventId != null;
+  el.usersModeHint.classList.toggle("hidden", !inParticipantMode);
+  el.usersModeHint.textContent = inParticipantMode
+    ? `Режим добавления участников для мероприятия #${state.participantsModeEventId}`
+    : "Список пользователей";
+
+  renderList(el.usersList, state.usersList, (user) => `
+    <p class="list-item-title">#${user.id} ${escapeHtml(user.first_name)} ${escapeHtml(user.last_name)}</p>
+    <p class="list-item-meta">Специализация: ${escapeHtml(user.speciality || "не указана")}</p>
+    ${
+      inParticipantMode
+        ? `<div class="detail-actions">
+            <select data-user-role-select="${user.id}">
+              <option value="organizer">organizer</option>
+              <option value="executor">executor</option>
+              <option value="viewer">viewer</option>
+            </select>
+            <button class="btn btn-inline" type="button" data-add-participant-user="${user.id}">Добавить в мероприятие</button>
+          </div>`
+        : ""
+    }
+  `);
+}
+
+function getTasksByEventId(eventId) {
+  return state.tasks.filter((task) => task.event_id === Number(eventId));
+}
+
+function getResourcesByEventId(eventId) {
+  return state.resources.filter((resource) => resource.event_id === Number(eventId));
+}
+
+function populateAllocationEventOptions(selectedEventId = null) {
+  if (!el.allocationEventSelect) return;
+  const options = ['<option value="">Выберите мероприятие</option>'];
+  state.events.forEach((event) => {
+    const selected = selectedEventId != null && Number(selectedEventId) === event.id ? "selected" : "";
+    options.push(`<option value="${event.id}" ${selected}>${escapeHtml(formatEventLabel(event))}</option>`);
+  });
+  el.allocationEventSelect.innerHTML = options.join("");
+}
+
+function populateAllocationTaskOptions(eventId, selectedTaskId = null) {
+  if (!el.allocationTaskSelect) return;
+  const tasks = eventId ? getTasksByEventId(eventId) : [];
+  const options = ['<option value="">Без задачи</option>'];
+  tasks.forEach((task) => {
+    const selected = selectedTaskId != null && Number(selectedTaskId) === task.id ? "selected" : "";
+    options.push(`<option value="${task.id}" ${selected}>#${task.id} ${escapeHtml(task.title)}</option>`);
+  });
+  el.allocationTaskSelect.innerHTML = options.join("");
+}
+
+function populateAllocationResourceOptions(eventId, selectedResourceId = null) {
+  if (!el.allocationResourceSelect) return;
+  const resources = eventId ? getResourcesByEventId(eventId) : [];
+  const options = ['<option value="">Выберите ресурс</option>'];
+  resources.forEach((resource) => {
+    const selected = selectedResourceId != null && Number(selectedResourceId) === resource.id ? "selected" : "";
+    options.push(`<option value="${resource.id}" ${selected}>#${resource.id} ${escapeHtml(resource.name)}</option>`);
+  });
+  el.allocationResourceSelect.innerHTML = options.join("");
+}
+
 function formatEventLabel(event) {
   return `${event.title} | ${new Date(event.start_time).toLocaleString()} - ${new Date(event.end_time).toLocaleString()}`;
 }
@@ -368,6 +476,37 @@ async function presetTaskCreateForEvent(eventId) {
   await loadAssigneeOptions(eventId);
 }
 
+async function openUsersForEventParticipants(eventId) {
+  state.participantsModeEventId = eventId;
+  setScreen("users");
+  await loadUsers();
+}
+
+function openAllocationCreatePanel(preset = {}) {
+  state.allocationPreset = {
+    eventId: preset.eventId ?? null,
+    taskId: preset.taskId ?? null,
+    resourceId: preset.resourceId ?? null
+  };
+  setScreen("resources");
+  if (!canCreate()) return;
+  const panel = document.getElementById("allocation-create-panel");
+  if (panel) {
+    panel.classList.remove("hidden");
+  }
+  populateAllocationEventOptions(state.allocationPreset.eventId);
+  populateAllocationTaskOptions(state.allocationPreset.eventId, state.allocationPreset.taskId);
+  populateAllocationResourceOptions(state.allocationPreset.eventId, state.allocationPreset.resourceId);
+  const allocForm = document.getElementById("allocation-form");
+  if (allocForm && state.allocationPreset.taskId) {
+    const task = state.tasks.find((item) => item.id === Number(state.allocationPreset.taskId));
+    if (task) {
+      allocForm.elements.date_start.value = toDatetimeLocalValue(task.start_time);
+      allocForm.elements.date_end.value = toDatetimeLocalValue(task.end_time);
+    }
+  }
+}
+
 function syncAuthUi() {
   const isAuth = Boolean(state.token);
   el.authBlock.classList.toggle("hidden", isAuth);
@@ -403,7 +542,7 @@ function setProfileRequired(isRequired) {
 function syncCreateControls() {
   const can = canCreate();
   if (!can) {
-    ["event-create-panel", "task-create-panel", "resource-create-panel", "ai-create-panel"].forEach((id) => {
+    ["event-create-panel", "task-create-panel", "resource-create-panel", "allocation-create-panel", "ai-create-panel"].forEach((id) => {
       const panel = document.getElementById(id);
       if (panel) panel.classList.add("hidden");
     });
@@ -470,8 +609,12 @@ async function refreshData() {
   renderEvents();
   renderTasks();
   renderResources();
+  renderUsers();
   renderDashboard();
   populateTaskEventOptions(state.taskCreatePresetEventId);
+  populateAllocationEventOptions(state.allocationPreset.eventId);
+  populateAllocationTaskOptions(state.allocationPreset.eventId, state.allocationPreset.taskId);
+  populateAllocationResourceOptions(state.allocationPreset.eventId, state.allocationPreset.resourceId);
   if (state.taskCreatePresetEventId != null) {
     await loadAssigneeOptions(state.taskCreatePresetEventId);
   }
@@ -485,6 +628,20 @@ async function refreshData() {
     return;
   }
   notify("Данные обновлены");
+}
+
+async function loadUsers() {
+  if (!state.token) return;
+  const params = new URLSearchParams();
+  if (state.usersSearch.q) params.set("q", state.usersSearch.q);
+  if (state.usersSearch.speciality) params.set("speciality", state.usersSearch.speciality);
+  try {
+    const list = await apiRequest(`${API.users}/public?${params.toString()}`);
+    state.usersList = Array.isArray(list) ? list : [];
+    renderUsers();
+  } catch (error) {
+    notify(`Ошибка загрузки пользователей: ${error.message}`, true);
+  }
 }
 
 async function closeDetailView() {
@@ -578,6 +735,8 @@ function renderEventDetailCard(event, tasks, depMap) {
     <div class="panel">
       <div class="detail-actions">
         <button type="button" class="btn btn-muted btn-inline" id="event-open-task-create-btn">+ Создать задачу</button>
+        <button type="button" class="btn btn-muted btn-inline" id="event-open-users-btn">+ Добавить участника</button>
+        <button type="button" class="btn btn-muted btn-inline" id="event-open-allocation-btn">+ Создать выделение ресурса</button>
         <button type="button" class="btn btn-muted btn-inline" id="event-toggle-edit-btn">Редактировать</button>
       </div>
       <div id="event-edit-section" class="hidden" style="margin-top:12px">
@@ -632,6 +791,12 @@ function renderEventDetailCard(event, tasks, depMap) {
     document.getElementById("event-open-task-create-btn").addEventListener("click", () => {
       state.taskCreatePresetEventId = event.id;
       void presetTaskCreateForEvent(event.id);
+    });
+    document.getElementById("event-open-users-btn").addEventListener("click", () => {
+      void openUsersForEventParticipants(event.id);
+    });
+    document.getElementById("event-open-allocation-btn").addEventListener("click", () => {
+      openAllocationCreatePanel({ eventId: event.id });
     });
     document.getElementById("event-toggle-edit-btn").addEventListener("click", () => {
       document.getElementById("event-edit-section").classList.remove("hidden");
@@ -717,13 +882,11 @@ function renderTaskDetailCard(task) {
   const mode = taskDetailMode(task);
   const canManage = canCreate();
 
-  const statusSelect = (name, current) => `
+  const statusSelect = (name, current, options = ["todo", "in_progress", "done", "overdue", "blocked"]) => `
     <select name="${name}">
-      <option value="todo" ${current === "todo" ? "selected" : ""}>todo</option>
-      <option value="in_progress" ${current === "in_progress" ? "selected" : ""}>in_progress</option>
-      <option value="done" ${current === "done" ? "selected" : ""}>done</option>
-      <option value="overdue" ${current === "overdue" ? "selected" : ""}>overdue</option>
-      <option value="blocked" ${current === "blocked" ? "selected" : ""}>blocked</option>
+      ${options
+        .map((option) => `<option value="${option}" ${current === option ? "selected" : ""}>${option}</option>`)
+        .join("")}
     </select>`;
 
   let editSection = "";
@@ -731,6 +894,7 @@ function renderTaskDetailCard(task) {
     editSection = `
     <div class="panel">
       <div class="detail-actions">
+        <button type="button" class="btn btn-muted btn-inline" id="task-open-allocation-btn">+ Создать выделение ресурса</button>
         <button type="button" class="btn btn-muted btn-inline" id="task-toggle-edit-btn">Редактировать</button>
       </div>
       <div id="task-edit-section" class="hidden" style="margin-top:12px">
@@ -768,7 +932,7 @@ function renderTaskDetailCard(task) {
         <h3>Смена статуса</h3>
         <p class="list-item-meta">Как исполнитель вы можете изменить только статус.</p>
         <form id="task-status-form" class="grid-form">
-          <label>Статус ${statusSelect("status", task.status)}</label>
+          <label>Статус ${statusSelect("status", task.status, ["in_progress", "done"])}</label>
           <button class="btn btn-primary" type="submit">Сохранить статус</button>
         </form>
       </div>
@@ -793,6 +957,9 @@ function renderTaskDetailCard(task) {
   `;
 
   if (mode === "full" && canManage) {
+    document.getElementById("task-open-allocation-btn").addEventListener("click", () => {
+      openAllocationCreatePanel({ eventId: task.event_id, taskId: task.id });
+    });
     document.getElementById("task-toggle-edit-btn").addEventListener("click", () => {
       document.getElementById("task-edit-section").classList.remove("hidden");
     });
@@ -915,6 +1082,7 @@ function renderResourceDetailCard(resource) {
     ? `
     <div class="panel">
       <div class="detail-actions">
+        <button type="button" class="btn btn-muted btn-inline" id="resource-open-allocation-btn">+ Создать выделение ресурса</button>
         <button type="button" class="btn btn-muted btn-inline" id="resource-toggle-edit-btn">Редактировать</button>
       </div>
       <div id="resource-edit-section" class="hidden" style="margin-top:12px">
@@ -962,6 +1130,9 @@ function renderResourceDetailCard(resource) {
   `;
 
   if (canManage) {
+    document.getElementById("resource-open-allocation-btn").addEventListener("click", () => {
+      openAllocationCreatePanel({ eventId: resource.event_id, resourceId: resource.id });
+    });
     document.getElementById("resource-toggle-edit-btn").addEventListener("click", () => {
       document.getElementById("resource-edit-section").classList.remove("hidden");
     });
@@ -1126,6 +1297,95 @@ async function onTaskEventChange(event) {
   await loadAssigneeOptions(state.taskCreatePresetEventId);
 }
 
+async function onUsersSearchSubmit(event) {
+  event.preventDefault();
+  const payload = serializeForm(event.target);
+  state.usersSearch.q = (payload.q || "").trim();
+  state.usersSearch.speciality = (payload.speciality || "").trim();
+  await loadUsers();
+}
+
+async function onUsersListClick(event) {
+  const addBtn = event.target.closest("[data-add-participant-user]");
+  if (!addBtn) return;
+  if (!state.participantsModeEventId) return;
+
+  const userId = Number(addBtn.dataset.addParticipantUser);
+  if (!userId) return;
+  const roleSelect = document.querySelector(`[data-user-role-select="${userId}"]`);
+  const role = roleSelect ? roleSelect.value : "viewer";
+
+  try {
+    await apiRequest(`${API.events}${state.participantsModeEventId}/participants`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId, role })
+    });
+    notify("Участник добавлен");
+  } catch (error) {
+    notify(`Ошибка добавления участника: ${error.message}`, true);
+  }
+}
+
+function onAllocationEventChange(event) {
+  const eventId = Number(event.target.value) || null;
+  state.allocationPreset.eventId = eventId;
+  state.allocationPreset.taskId = null;
+  state.allocationPreset.resourceId = null;
+  populateAllocationTaskOptions(eventId, null);
+  populateAllocationResourceOptions(eventId, null);
+}
+
+function onAllocationTaskChange(event) {
+  const taskId = Number(event.target.value) || null;
+  state.allocationPreset.taskId = taskId;
+  if (!taskId) return;
+  const task = state.tasks.find((item) => item.id === taskId);
+  if (!task) return;
+  state.allocationPreset.eventId = task.event_id;
+  if (el.allocationEventSelect) {
+    el.allocationEventSelect.value = String(task.event_id);
+  }
+  populateAllocationTaskOptions(task.event_id, taskId);
+  populateAllocationResourceOptions(task.event_id, state.allocationPreset.resourceId);
+  const form = document.getElementById("allocation-form");
+  if (form) {
+    form.elements.date_start.value = toDatetimeLocalValue(task.start_time);
+    form.elements.date_end.value = toDatetimeLocalValue(task.end_time);
+  }
+}
+
+async function onAllocationCreate(event) {
+  event.preventDefault();
+  const form = event.target;
+  const payload = serializeForm(form);
+  const eventId = Number(payload.event_id);
+  payload.task_id = payload.task_id ? Number(payload.task_id) : null;
+  payload.resource_id = Number(payload.resource_id);
+  payload.quantity_used = payload.quantity_used ? Number(payload.quantity_used) : 1;
+  payload.date_start = toIsoOrNull(payload.date_start);
+  payload.date_end = toIsoOrNull(payload.date_end);
+
+  if (!eventId || !payload.resource_id || !payload.date_start || !payload.date_end) {
+    notify("Заполните обязательные поля выделения", true);
+    return;
+  }
+
+  try {
+    await apiRequest(`${API.resources}allocations/`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    notify("Выделение создано");
+    form.reset();
+    state.allocationPreset = { eventId: null, taskId: null, resourceId: null };
+    populateAllocationEventOptions();
+    populateAllocationTaskOptions(null);
+    populateAllocationResourceOptions(null);
+  } catch (error) {
+    notify(`Ошибка создания выделения: ${error.message}`, true);
+  }
+}
+
 async function onResourceCreate(event) {
   event.preventDefault();
   const form = event.target;
@@ -1198,6 +1458,11 @@ function bindEvents() {
   });
 
   el.protectedContent.addEventListener("click", onProtectedClick);
+  if (el.usersList) {
+    el.usersList.addEventListener("click", (e) => {
+      void onUsersListClick(e);
+    });
+  }
 
   document.getElementById("login-form").addEventListener("submit", onLoginSubmit);
   document.getElementById("register-form").addEventListener("submit", onRegisterSubmit);
@@ -1209,6 +1474,14 @@ function bindEvents() {
   document.getElementById("task-event-select").addEventListener("change", (e) => {
     void onTaskEventChange(e);
   });
+  document.getElementById("users-search-form").addEventListener("submit", (e) => {
+    void onUsersSearchSubmit(e);
+  });
+  document.getElementById("allocation-form").addEventListener("submit", (e) => {
+    void onAllocationCreate(e);
+  });
+  document.getElementById("allocation-event-select").addEventListener("change", onAllocationEventChange);
+  document.getElementById("allocation-task-select").addEventListener("change", onAllocationTaskChange);
   document.getElementById("resource-form").addEventListener("submit", onResourceCreate);
   document.getElementById("ai-form").addEventListener("submit", onAiGenerate);
   document.getElementById("logout-btn").addEventListener("click", () => {
@@ -1217,9 +1490,11 @@ function bindEvents() {
     state.events = [];
     state.tasks = [];
     state.resources = [];
+    state.usersList = [];
     renderEvents();
     renderTasks();
     renderResources();
+    renderUsers();
     renderDashboard();
     setProfileRequired(false);
     notify("Сессия очищена");
