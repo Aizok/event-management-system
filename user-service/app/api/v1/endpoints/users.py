@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
@@ -113,6 +113,20 @@ async def read_own_profile(
             detail="User profile not found"
         )
     return profile
+
+
+@router.get("/public/by-ids", response_model=List[UserPublicResponse])
+async def read_public_profiles_by_ids(
+        ids: List[int] = Query(default=[]),
+        db: AsyncSession = Depends(get_db),
+        token_data: TokenData = Depends(get_current_user_data)
+):
+    _ = token_data
+    unique_ids = list(dict.fromkeys(ids))
+    if not unique_ids:
+        return []
+    profiles = await user_crud.get_by_ids(db, unique_ids)
+    return profiles
 
 
 @router.get("/{user_id}", response_model=UserPublicResponse)

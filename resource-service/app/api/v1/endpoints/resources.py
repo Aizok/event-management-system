@@ -20,9 +20,11 @@ router = APIRouter()
 async def create_resource(
         resource_in: ResourceCreate,
         db: AsyncSession = Depends(get_db),
-        user_id: int = Depends(get_current_profile_id)
+        user_id: int = Depends(get_current_profile_id),
+        user_data: TokenData = Depends(get_current_user_data)
 ):
-    await check_resource_permissions(resource_in.event_id, user_id)
+    if user_data.role != "admin":
+        await check_resource_permissions(resource_in.event_id, user_id)
     resource=await resource_crud.create_resource(db=db, obj_in=resource_in, owner_id=user_id)
     return resource
 

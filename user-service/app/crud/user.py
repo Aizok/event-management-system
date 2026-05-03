@@ -35,6 +35,15 @@ class UserCRUD:
         result=await db.execute(query)
         return result.scalars().all()
 
+    async def get_by_ids(self, db: AsyncSession, user_ids: List[int]) -> List[UserProfile]:
+        if not user_ids:
+            return []
+        query = select(UserProfile).where(UserProfile.id.in_(user_ids))
+        result = await db.execute(query)
+        profiles = result.scalars().all()
+        profiles_map = {profile.id: profile for profile in profiles}
+        return [profiles_map[user_id] for user_id in user_ids if user_id in profiles_map]
+
     async def update(self, db: AsyncSession, user_id: int, obj_in: UserUpdate) -> Optional[UserProfile]:
         db_obj = await self.get(db, user_id)
         if not db_obj:

@@ -8,6 +8,7 @@ const state = {
   detailView: null,
   detailEventId: null,
   detailBackTarget: null,
+  taskCreatePresetEventId: null,
   events: [],
   tasks: [],
   resources: []
@@ -37,7 +38,9 @@ const el = {
   tasksList: document.getElementById("tasks-list"),
   resourcesList: document.getElementById("resources-list"),
   aiResult: document.getElementById("ai-result"),
-  protectedContent: document.getElementById("protected-content")
+  protectedContent: document.getElementById("protected-content"),
+  taskEventSelect: document.getElementById("task-event-select"),
+  taskAssigneeSelect: document.getElementById("task-assignee-select")
 };
 
 function notify(text, isError = false) {
@@ -85,6 +88,7 @@ function clearSession() {
   state.detailView = null;
   state.detailEventId = null;
   state.detailBackTarget = null;
+  state.taskCreatePresetEventId = null;
   localStorage.removeItem("ems_token");
   localStorage.removeItem("ems_email");
 }
@@ -230,7 +234,14 @@ function updateTopbarActions() {
   btn.textContent = cfg.label;
   btn.addEventListener("click", () => {
     const panel = document.getElementById(cfg.panel);
-    if (panel) panel.classList.toggle("hidden");
+    if (panel) {
+      panel.classList.toggle("hidden");
+      if (cfg.panel === "task-create-panel" && !panel.classList.contains("hidden")) {
+        const selectedId = state.taskCreatePresetEventId;
+        populateTaskEventOptions(selectedId);
+        void loadAssigneeOptions(selectedId);
+      }
+    }
   });
   container.appendChild(btn);
   container.classList.remove("hidden");
@@ -297,6 +308,64 @@ function renderResources() {
     <p class="list-item-meta">Мероприятие: #${resource.event_id} | Кол-во: ${resource.quantity}</p>
     <p class="list-item-meta">Стоимость/час: ${resource.cost_per_hour ?? "не указано"}</p>
   `);
+}
+
+function formatEventLabel(event) {
+  return `${event.title} | ${new Date(event.start_time).toLocaleString()} - ${new Date(event.end_time).toLocaleString()}`;
+}
+
+function populateTaskEventOptions(selectedEventId = null) {
+  if (!el.taskEventSelect) return;
+  const options = ['<option value="">Выберите мероприятие</option>'];
+  state.events.forEach((event) => {
+    const isSelected = selectedEventId != null && Number(selectedEventId) === event.id;
+    options.push(
+      `<option value="${event.id}" ${isSelected ? "selected" : ""}>${escapeHtml(formatEventLabel(event))}</option>`
+    );
+  });
+  el.taskEventSelect.innerHTML = options.join("");
+}
+
+async function loadAssigneeOptions(eventId, selectedAssigneeId = null) {
+  if (!el.taskAssigneeSelect) return;
+  el.taskAssigneeSelect.innerHTML = '<option value="">Без исполнителя</option>';
+  if (!eventId) return;
+  try {
+    const participants = await apiRequest(`${API.events}${eventId}/participants`);
+    const candidateIds = Array.from(
+      new Set(
+        (participants || [])
+          .filter((item) => ["owner", "organizer", "executor"].includes(item.role))
+          .map((item) => item.user_id)
+      )
+    );
+    if (!candidateIds.length) return;
+    const params = new URLSearchParams();
+    candidateIds.forEach((id) => params.append("ids", String(id)));
+    const profiles = await apiRequest(`${API.users}/public/by-ids?${params.toString()}`);
+    profiles.forEach((profile) => {
+      const option = document.createElement("option");
+      option.value = String(profile.id);
+      option.textContent = `${profile.first_name} ${profile.last_name} (#${profile.id})`;
+      if (selectedAssigneeId != null && Number(selectedAssigneeId) === profile.id) {
+        option.selected = true;
+      }
+      el.taskAssigneeSelect.appendChild(option);
+    });
+  } catch (error) {
+    notify(`Не удалось загрузить исполнителей: ${error.message}`, true);
+  }
+}
+
+async function presetTaskCreateForEvent(eventId) {
+  setScreen("tasks");
+  if (!canCreate()) return;
+  const panel = document.getElementById("task-create-panel");
+  if (panel) {
+    panel.classList.remove("hidden");
+  }
+  populateTaskEventOptions(eventId);
+  await loadAssigneeOptions(eventId);
 }
 
 function syncAuthUi() {
@@ -402,6 +471,10 @@ async function refreshData() {
   renderTasks();
   renderResources();
   renderDashboard();
+  populateTaskEventOptions(state.taskCreatePresetEventId);
+  if (state.taskCreatePresetEventId != null) {
+    await loadAssigneeOptions(state.taskCreatePresetEventId);
+  }
 
   if (errors.length) {
     if (errors.every((entry) => entry.includes("Сессия истекла или токен недействителен"))) {
@@ -503,26 +576,33 @@ function renderEventDetailCard(event, tasks, depMap) {
   const editSection = canManage
     ? `
     <div class="panel">
-      <h3>Редактирование</h3>
-      <form id="event-edit-form" class="grid-form">
-        <label>Название<input name="title" required value="${escapeHtml(event.title)}" /></label>
-        <label>Описание<textarea name="description" rows="3">${escapeHtml(event.description || "")}</textarea></label>
-        <label>Начало<input type="datetime-local" name="start_time" required value="${toDatetimeLocalValue(event.start_time)}" /></label>
-        <label>Окончание<input type="datetime-local" name="end_time" required value="${toDatetimeLocalValue(event.end_time)}" /></label>
-        <label>Локация<input name="location" value="${escapeHtml(event.location || "")}" /></label>
-        <label>Бюджет<input type="number" step="0.01" name="budget" value="${event.budget ?? 0}" /></label>
-        <label>Статус
-          <select name="status">
-            <option value="draft" ${event.status === "draft" ? "selected" : ""}>draft</option>
-            <option value="published" ${event.status === "published" ? "selected" : ""}>published</option>
-            <option value="cancelled" ${event.status === "cancelled" ? "selected" : ""}>cancelled</option>
-            <option value="completed" ${event.status === "completed" ? "selected" : ""}>completed</option>
-          </select>
-        </label>
-        <button class="btn btn-primary" type="submit">Сохранить</button>
-      </form>
-      <div class="detail-actions" style="margin-top:12px">
-        <button type="button" class="btn btn-danger" id="event-delete-btn">Удалить мероприятие</button>
+      <div class="detail-actions">
+        <button type="button" class="btn btn-muted btn-inline" id="event-open-task-create-btn">+ Создать задачу</button>
+        <button type="button" class="btn btn-muted btn-inline" id="event-toggle-edit-btn">Редактировать</button>
+      </div>
+      <div id="event-edit-section" class="hidden" style="margin-top:12px">
+        <h3>Редактирование</h3>
+        <form id="event-edit-form" class="grid-form">
+          <label>Название<input name="title" required value="${escapeHtml(event.title)}" /></label>
+          <label>Описание<textarea name="description" rows="3">${escapeHtml(event.description || "")}</textarea></label>
+          <label>Начало<input type="datetime-local" name="start_time" required value="${toDatetimeLocalValue(event.start_time)}" /></label>
+          <label>Окончание<input type="datetime-local" name="end_time" required value="${toDatetimeLocalValue(event.end_time)}" /></label>
+          <label>Локация<input name="location" value="${escapeHtml(event.location || "")}" /></label>
+          <label>Бюджет<input type="number" step="0.01" name="budget" value="${event.budget ?? 0}" /></label>
+          <label>Статус
+            <select name="status">
+              <option value="draft" ${event.status === "draft" ? "selected" : ""}>draft</option>
+              <option value="published" ${event.status === "published" ? "selected" : ""}>published</option>
+              <option value="cancelled" ${event.status === "cancelled" ? "selected" : ""}>cancelled</option>
+              <option value="completed" ${event.status === "completed" ? "selected" : ""}>completed</option>
+            </select>
+          </label>
+          <button class="btn btn-primary" type="submit">Сохранить</button>
+        </form>
+        <div class="detail-actions" style="margin-top:12px">
+          <button type="button" class="btn btn-danger" id="event-delete-btn">Удалить мероприятие</button>
+          <button type="button" class="btn btn-muted btn-inline" id="event-cancel-edit-btn">Отмена</button>
+        </div>
       </div>
     </div>`
     : "";
@@ -549,6 +629,16 @@ function renderEventDetailCard(event, tasks, depMap) {
   `;
 
   if (canManage) {
+    document.getElementById("event-open-task-create-btn").addEventListener("click", () => {
+      state.taskCreatePresetEventId = event.id;
+      void presetTaskCreateForEvent(event.id);
+    });
+    document.getElementById("event-toggle-edit-btn").addEventListener("click", () => {
+      document.getElementById("event-edit-section").classList.remove("hidden");
+    });
+    document.getElementById("event-cancel-edit-btn").addEventListener("click", () => {
+      document.getElementById("event-edit-section").classList.add("hidden");
+    });
     document.getElementById("event-edit-form").addEventListener("submit", (e) => onEventEditSubmit(e, event.id));
     document.getElementById("event-delete-btn").addEventListener("click", () => onEventDelete(event.id));
   }
@@ -640,37 +730,48 @@ function renderTaskDetailCard(task) {
   if (mode === "full" && canManage) {
     editSection = `
     <div class="panel">
-      <h3>Редактирование</h3>
-      <form id="task-edit-form" class="grid-form">
-        <label>Название<input name="title" required value="${escapeHtml(task.title)}" /></label>
-        <label>Описание<textarea name="description" rows="3">${escapeHtml(task.description || "")}</textarea></label>
-        <label>Статус ${statusSelect("status", task.status)}</label>
-        <label>Приоритет
-          <select name="priority">
-            <option value="low" ${task.priority === "low" ? "selected" : ""}>low</option>
-            <option value="medium" ${task.priority === "medium" ? "selected" : ""}>medium</option>
-            <option value="high" ${task.priority === "high" ? "selected" : ""}>high</option>
-          </select>
-        </label>
-        <label>Исполнитель (id профиля)<input name="assignee_id" value="${task.assignee_id ?? ""}" placeholder="пусто — не назначен" /></label>
-        <label>Дедлайн<input type="datetime-local" name="deadline" required value="${toDatetimeLocalValue(task.deadline)}" /></label>
-        <label>Старт (план)<input type="datetime-local" name="start_time" required value="${toDatetimeLocalValue(task.start_time)}" /></label>
-        <label>Окончание (план)<input type="datetime-local" name="end_time" required value="${toDatetimeLocalValue(task.end_time)}" /></label>
-        <button class="btn btn-primary" type="submit">Сохранить</button>
-      </form>
-      <div class="detail-actions" style="margin-top:12px">
-        <button type="button" class="btn btn-danger" id="task-delete-btn">Удалить задачу</button>
+      <div class="detail-actions">
+        <button type="button" class="btn btn-muted btn-inline" id="task-toggle-edit-btn">Редактировать</button>
+      </div>
+      <div id="task-edit-section" class="hidden" style="margin-top:12px">
+        <h3>Редактирование</h3>
+        <form id="task-edit-form" class="grid-form">
+          <label>Название<input name="title" required value="${escapeHtml(task.title)}" /></label>
+          <label>Описание<textarea name="description" rows="3">${escapeHtml(task.description || "")}</textarea></label>
+          <label>Статус ${statusSelect("status", task.status)}</label>
+          <label>Приоритет
+            <select name="priority">
+              <option value="low" ${task.priority === "low" ? "selected" : ""}>low</option>
+              <option value="medium" ${task.priority === "medium" ? "selected" : ""}>medium</option>
+              <option value="high" ${task.priority === "high" ? "selected" : ""}>high</option>
+            </select>
+          </label>
+          <label>Исполнитель (id профиля)<input name="assignee_id" value="${task.assignee_id ?? ""}" placeholder="пусто — не назначен" /></label>
+          <label>Дедлайн<input type="datetime-local" name="deadline" required value="${toDatetimeLocalValue(task.deadline)}" /></label>
+          <label>Старт (план)<input type="datetime-local" name="start_time" required value="${toDatetimeLocalValue(task.start_time)}" /></label>
+          <label>Окончание (план)<input type="datetime-local" name="end_time" required value="${toDatetimeLocalValue(task.end_time)}" /></label>
+          <button class="btn btn-primary" type="submit">Сохранить</button>
+        </form>
+        <div class="detail-actions" style="margin-top:12px">
+          <button type="button" class="btn btn-danger" id="task-delete-btn">Удалить задачу</button>
+          <button type="button" class="btn btn-muted btn-inline" id="task-cancel-edit-btn">Отмена</button>
+        </div>
       </div>
     </div>`;
   } else if (mode === "status_only") {
     editSection = `
     <div class="panel">
-      <h3>Смена статуса</h3>
-      <p class="list-item-meta">Как исполнитель вы можете изменить только статус.</p>
-      <form id="task-status-form" class="grid-form">
-        <label>Статус ${statusSelect("status", task.status)}</label>
-        <button class="btn btn-primary" type="submit">Сохранить статус</button>
-      </form>
+      <div class="detail-actions">
+        <button type="button" class="btn btn-muted btn-inline" id="task-toggle-status-btn">Изменить статус</button>
+      </div>
+      <div id="task-status-section" class="hidden" style="margin-top:12px">
+        <h3>Смена статуса</h3>
+        <p class="list-item-meta">Как исполнитель вы можете изменить только статус.</p>
+        <form id="task-status-form" class="grid-form">
+          <label>Статус ${statusSelect("status", task.status)}</label>
+          <button class="btn btn-primary" type="submit">Сохранить статус</button>
+        </form>
+      </div>
     </div>`;
   }
 
@@ -692,9 +793,18 @@ function renderTaskDetailCard(task) {
   `;
 
   if (mode === "full" && canManage) {
+    document.getElementById("task-toggle-edit-btn").addEventListener("click", () => {
+      document.getElementById("task-edit-section").classList.remove("hidden");
+    });
+    document.getElementById("task-cancel-edit-btn").addEventListener("click", () => {
+      document.getElementById("task-edit-section").classList.add("hidden");
+    });
     document.getElementById("task-edit-form").addEventListener("submit", (e) => onTaskEditSubmit(e, task.id));
     document.getElementById("task-delete-btn").addEventListener("click", () => onTaskDelete(task.id));
   } else if (mode === "status_only") {
+    document.getElementById("task-toggle-status-btn").addEventListener("click", () => {
+      document.getElementById("task-status-section").classList.remove("hidden");
+    });
     document.getElementById("task-status-form").addEventListener("submit", (e) => onTaskStatusSubmit(e, task.id));
   }
 }
@@ -804,24 +914,30 @@ function renderResourceDetailCard(resource) {
   const editSection = canManage
     ? `
     <div class="panel">
-      <h3>Редактирование</h3>
-      <form id="resource-edit-form" class="grid-form">
-        <label>Название<input name="name" required value="${escapeHtml(resource.name)}" /></label>
-        <label>Тип
-          <select name="type">
-            <option value="equipment" ${resource.type === "equipment" ? "selected" : ""}>equipment</option>
-            <option value="venue" ${resource.type === "venue" ? "selected" : ""}>venue</option>
-            <option value="personnel" ${resource.type === "personnel" ? "selected" : ""}>personnel</option>
-            <option value="material" ${resource.type === "material" ? "selected" : ""}>material</option>
-          </select>
-        </label>
-        <label>Описание<textarea name="description" rows="2">${escapeHtml(resource.description || "")}</textarea></label>
-        <label>Количество<input type="number" name="quantity" required min="1" value="${resource.quantity}" /></label>
-        <label>Стоимость/час<input type="number" step="0.01" name="cost_per_hour" value="${resource.cost_per_hour ?? ""}" /></label>
-        <button class="btn btn-primary" type="submit">Сохранить</button>
-      </form>
-      <div class="detail-actions" style="margin-top:12px">
-        <button type="button" class="btn btn-danger" id="resource-delete-btn">Удалить ресурс</button>
+      <div class="detail-actions">
+        <button type="button" class="btn btn-muted btn-inline" id="resource-toggle-edit-btn">Редактировать</button>
+      </div>
+      <div id="resource-edit-section" class="hidden" style="margin-top:12px">
+        <h3>Редактирование</h3>
+        <form id="resource-edit-form" class="grid-form">
+          <label>Название<input name="name" required value="${escapeHtml(resource.name)}" /></label>
+          <label>Тип
+            <select name="type">
+              <option value="equipment" ${resource.type === "equipment" ? "selected" : ""}>equipment</option>
+              <option value="venue" ${resource.type === "venue" ? "selected" : ""}>venue</option>
+              <option value="personnel" ${resource.type === "personnel" ? "selected" : ""}>personnel</option>
+              <option value="material" ${resource.type === "material" ? "selected" : ""}>material</option>
+            </select>
+          </label>
+          <label>Описание<textarea name="description" rows="2">${escapeHtml(resource.description || "")}</textarea></label>
+          <label>Количество<input type="number" name="quantity" required min="1" value="${resource.quantity}" /></label>
+          <label>Стоимость/час<input type="number" step="0.01" name="cost_per_hour" value="${resource.cost_per_hour ?? ""}" /></label>
+          <button class="btn btn-primary" type="submit">Сохранить</button>
+        </form>
+        <div class="detail-actions" style="margin-top:12px">
+          <button type="button" class="btn btn-danger" id="resource-delete-btn">Удалить ресурс</button>
+          <button type="button" class="btn btn-muted btn-inline" id="resource-cancel-edit-btn">Отмена</button>
+        </div>
       </div>
     </div>`
     : "";
@@ -846,6 +962,12 @@ function renderResourceDetailCard(resource) {
   `;
 
   if (canManage) {
+    document.getElementById("resource-toggle-edit-btn").addEventListener("click", () => {
+      document.getElementById("resource-edit-section").classList.remove("hidden");
+    });
+    document.getElementById("resource-cancel-edit-btn").addEventListener("click", () => {
+      document.getElementById("resource-edit-section").classList.add("hidden");
+    });
     document.getElementById("resource-edit-form").addEventListener("submit", (e) => onResourceEditSubmit(e, resource.id));
     document.getElementById("resource-delete-btn").addEventListener("click", () => onResourceDelete(resource.id));
   }
@@ -973,6 +1095,10 @@ async function onTaskCreate(event) {
   const payload = serializeForm(form);
 
   payload.event_id = Number(payload.event_id);
+  if (!payload.event_id) {
+    notify("Выберите мероприятие", true);
+    return;
+  }
   payload.assignee_id = payload.assignee_id ? Number(payload.assignee_id) : null;
   payload.deadline = toIsoOrNull(payload.deadline);
   payload.start_time = toIsoOrNull(payload.start_time);
@@ -985,10 +1111,19 @@ async function onTaskCreate(event) {
     });
     notify("Задача создана");
     form.reset();
+    state.taskCreatePresetEventId = null;
+    populateTaskEventOptions();
+    await loadAssigneeOptions(null);
     await refreshData();
   } catch (error) {
     notify(`Ошибка создания задачи: ${error.message}`, true);
   }
+}
+
+async function onTaskEventChange(event) {
+  const eventId = Number(event.target.value);
+  state.taskCreatePresetEventId = Number.isNaN(eventId) || !eventId ? null : eventId;
+  await loadAssigneeOptions(state.taskCreatePresetEventId);
 }
 
 async function onResourceCreate(event) {
@@ -1071,6 +1206,9 @@ function bindEvents() {
   document.getElementById("auth-tab-register").addEventListener("click", () => setAuthView("register"));
   document.getElementById("event-form").addEventListener("submit", onEventCreate);
   document.getElementById("task-form").addEventListener("submit", onTaskCreate);
+  document.getElementById("task-event-select").addEventListener("change", (e) => {
+    void onTaskEventChange(e);
+  });
   document.getElementById("resource-form").addEventListener("submit", onResourceCreate);
   document.getElementById("ai-form").addEventListener("submit", onAiGenerate);
   document.getElementById("logout-btn").addEventListener("click", () => {

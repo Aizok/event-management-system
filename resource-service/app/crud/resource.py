@@ -16,8 +16,7 @@ class ResourceCRUD:
         )
         db.add(db_obj)
         await db.commit()
-        await db.refresh(db_obj)
-        return db_obj
+        return await self.get_with_allocations(db, db_obj.id)
 
 
     async def get_resource(self, db: AsyncSession, resource_id: int) -> Optional[Resource]:
@@ -33,7 +32,7 @@ class ResourceCRUD:
 
 
     async def get_multi_resources(self, db: AsyncSession, skip: int=0, limit: int=100) -> List[Resource]:
-        query=select(Resource).offset(skip).limit(limit)
+        query=select(Resource).options(selectinload(Resource.allocations)).offset(skip).limit(limit)
         result=await db.execute(query)
         return result.scalars().all()
 
@@ -41,6 +40,7 @@ class ResourceCRUD:
     async def get_resources_by_event_ids(self, db: AsyncSession, event_ids: List[int] ,skip: int=0, limit: int=100):
         query=(
             select(Resource)
+            .options(selectinload(Resource.allocations))
             .where(Resource.event_id.in_(event_ids))
             .order_by(Resource.created_at.desc())
             .offset(skip)
@@ -61,8 +61,7 @@ class ResourceCRUD:
             setattr(db_obj, field, value)
 
         await db.commit()
-        await db.refresh(db_obj)
-        return db_obj
+        return await self.get_with_allocations(db, resource_id)
 
 
     async def delete_resource(self, db: AsyncSession, resource_id: int) -> bool:
