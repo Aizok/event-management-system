@@ -45,3 +45,27 @@ async def get_user_email_from_auth(auth_user_id: int) -> str:
         except Exception as e:
             logger.error(f"Error fetching email: {e}")
             raise
+
+
+async def get_user_role_from_auth(auth_user_id: int) -> str | None:
+    try:
+        token = await get_service_token()
+    except Exception as e:
+        logger.error(f"Failed to get service token for role lookup: {e}")
+        return None
+
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(
+                f"http://nginx/api/auth/internal/users/{auth_user_id}",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            if resp.status_code == status.HTTP_404_NOT_FOUND:
+                return None
+            if resp.status_code != status.HTTP_200_OK:
+                logger.error(f"auth-service role error: {resp.status_code}, body: {resp.text}")
+                return None
+            return resp.json().get("role")
+        except Exception as e:
+            logger.error(f"Error fetching role: {e}")
+            return None

@@ -1,6 +1,6 @@
 import enum
 
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator
 from typing import Optional
 from datetime import datetime
 from ..models.event import EventStatus
@@ -13,6 +13,12 @@ class EventBase(BaseModel):
     location: Optional[str]=None
     budget: float = 0.0
 
+    @model_validator(mode="after")
+    def validate_time_range(self):
+        if self.end_time < self.start_time:
+            raise ValueError("end_time must be >= start_time")
+        return self
+
 class EventCreate(EventBase):
     pass
 
@@ -24,6 +30,12 @@ class EventUpdate(BaseModel):
     location: Optional[str] = None
     budget: Optional[float] = None
     status: Optional[EventStatus]=None
+
+    @model_validator(mode="after")
+    def validate_time_range(self):
+        if self.start_time is not None and self.end_time is not None and self.end_time < self.start_time:
+            raise ValueError("end_time must be >= start_time")
+        return self
 
 class EventResponse(EventBase):
     id: int

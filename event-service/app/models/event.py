@@ -1,7 +1,7 @@
 from datetime import datetime
 import enum
 
-from sqlalchemy import String, Text, DateTime, Float, Enum as SAEnum
+from sqlalchemy import String, Text, DateTime, Float, Enum as SAEnum, CheckConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,6 +17,9 @@ class EventStatus(str, enum.Enum):
 
 class Event(Base):
     __tablename__="events"
+    __table_args__ = (
+        CheckConstraint("end_time >= start_time", name="ck_events_end_time_gte_start_time"),
+    )
 
     id:Mapped[int]=mapped_column(primary_key=True, index=True)
     title:Mapped[str]=mapped_column(String(255), nullable=False)

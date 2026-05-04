@@ -8,6 +8,8 @@ from .event_participant import event_participant_crud, ParticipantRole
 
 class EventCRUD:
     async def create(self, db: AsyncSession, obj_in: EventCreate, owner_id: int) -> Event:
+        if obj_in.end_time < obj_in.start_time:
+            raise ValueError("end_time must be >= start_time")
         db_obj=Event(
             **obj_in.model_dump(),
             owner_id=owner_id
@@ -83,6 +85,10 @@ class EventCRUD:
             return None
 
         update_data=obj_in.model_dump(exclude_unset=True)
+        new_start = update_data.get("start_time", db_obj.start_time)
+        new_end = update_data.get("end_time", db_obj.end_time)
+        if new_end < new_start:
+            raise ValueError("end_time must be >= start_time")
         for field, value in update_data.items():
             setattr(db_obj, field, value)
 

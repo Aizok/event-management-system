@@ -28,6 +28,7 @@ class UserResponse(BaseModel):
     phone: Optional[str] = None
     speciality: Optional[str] = None
     bio: Optional[str] = None
+    role: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime]
 
@@ -41,6 +42,10 @@ class UserPublicResponse(BaseModel):
     speciality: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserPublicWithRoleResponse(UserPublicResponse):
+    role: Optional[str] = None
 
 
 class TokenRole(str, enum.Enum):

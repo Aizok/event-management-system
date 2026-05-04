@@ -7,8 +7,8 @@ from ....core.security import get_current_user_id, get_current_admin, get_curren
 from ....core.database import get_db
 from ....core.config import settings
 from ....crud.user import user_crud
-from ....schemas.user import UserCreate, UserResponse, UserPublicResponse, UserUpdate, TokenData
-from ....core.auth_client import get_user_email_from_auth
+from ....schemas.user import UserCreate, UserResponse, UserPublicResponse, UserPublicWithRoleResponse, UserUpdate, TokenData
+from ....core.auth_client import get_user_email_from_auth, get_user_role_from_auth
 
 from fastapi.security import OAuth2PasswordBearer
 
@@ -51,12 +51,33 @@ async def create_user_profile(
 async def read_user_profiles(
         skip: int=0,
         limit: int=100,
+        q: str | None = None,
+        speciality: str | None = None,
         db: AsyncSession=Depends(get_db),
         admin_data: TokenData = Depends(get_current_admin)
         #admin_data Только для проверки роли
 ):
-    users=await user_crud.get_multi(db, skip=skip, limit=limit)
-    return users
+    _ = admin_data
+    users = await user_crud.search_public(db, q=q, speciality=speciality, skip=skip, limit=limit)
+    output: list[UserResponse] = []
+    for user in users:
+        role = await get_user_role_from_auth(user.auth_user_id)
+        output.append(
+            UserResponse(
+                id=user.id,
+                auth_user_id=user.auth_user_id,
+                email=user.email,
+                first_name=user.first_name,
+                last_name=user.last_name,
+                phone=user.phone,
+                speciality=user.speciality,
+                bio=user.bio,
+                role=role,
+                created_at=user.created_at,
+                updated_at=user.updated_at
+            )
+        )
+    return output
 
 
 @router.get("/internal/{user_id}")
@@ -116,7 +137,7 @@ async def read_own_profile(
     return profile
 
 
-@router.get("/public/by-ids", response_model=List[UserPublicResponse])
+@router.get("/public/by-ids", response_model=List[UserPublicWithRoleResponse])
 async def read_public_profiles_by_ids(
         ids: List[int] = Query(default=[]),
         db: AsyncSession = Depends(get_db),
@@ -127,10 +148,22 @@ async def read_public_profiles_by_ids(
     if not unique_ids:
         return []
     profiles = await user_crud.get_by_ids(db, unique_ids)
-    return profiles
+    output: list[UserPublicWithRoleResponse] = []
+    for profile in profiles:
+        role = await get_user_role_from_auth(profile.auth_user_id)
+        output.append(
+            UserPublicWithRoleResponse(
+                id=profile.id,
+                first_name=profile.first_name,
+                last_name=profile.last_name,
+                speciality=profile.speciality,
+                role=role
+            )
+        )
+    return output
 
 
-@router.get("/public", response_model=List[UserPublicResponse])
+@router.get("/public", response_model=List[UserPublicWithRoleResponse])
 async def read_public_profiles(
         q: str | None = None,
         speciality: str | None = None,
@@ -139,8 +172,22 @@ async def read_public_profiles(
         db: AsyncSession = Depends(get_db),
         token_data: TokenData = Depends(get_current_user_data)
 ):
-    _ = token_data
-    return await user_crud.search_public(db, q=q, speciality=speciality, skip=skip, limit=limit)
+    profiles = await user_crud.search_public(db, q=q, speciality=speciality, skip=skip, limit=limit)
+    output: list[UserPublicWithRoleResponse] = []
+    for profile in profiles:
+        role = await get_user_role_from_auth(profile.auth_user_id)
+        if token_data.role != "admin" and role == "admin":
+            continue
+        output.append(
+            UserPublicWithRoleResponse(
+                id=profile.id,
+                first_name=profile.first_name,
+                last_name=profile.last_name,
+                speciality=profile.speciality,
+                role=role
+            )
+        )
+    return output
 
 
 @router.get("/{user_id}", response_model=UserPublicResponse)

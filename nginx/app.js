@@ -47,6 +47,8 @@ const el = {
   protectedContent: document.getElementById("protected-content"),
   taskEventSelect: document.getElementById("task-event-select"),
   taskAssigneeSelect: document.getElementById("task-assignee-select"),
+  resourceEventSelect: document.getElementById("resource-event-select"),
+  aiEventSelect: document.getElementById("ai-event-select"),
   allocationEventSelect: document.getElementById("allocation-event-select"),
   allocationTaskSelect: document.getElementById("allocation-task-select"),
   allocationResourceSelect: document.getElementById("allocation-resource-select")
@@ -63,6 +65,51 @@ function escapeHtml(value) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+const enumLabels = {
+  eventStatus: {
+    draft: "Черновик",
+    published: "Опубликовано",
+    cancelled: "Отменено",
+    completed: "Завершено"
+  },
+  taskStatus: {
+    todo: "К выполнению",
+    in_progress: "В работе",
+    done: "Завершено",
+    overdue: "Просрочено",
+    blocked: "Заблокировано"
+  },
+  taskPriority: {
+    low: "Низкий",
+    medium: "Средний",
+    high: "Высокий"
+  },
+  resourceType: {
+    equipment: "Оборудование",
+    venue: "Площадка",
+    personnel: "Персонал",
+    material: "Материал"
+  },
+  participantRole: {
+    owner: "Владелец",
+    organizer: "Организатор",
+    executor: "Исполнитель",
+    viewer: "Наблюдатель",
+    admin: "Администратор"
+  },
+  allocationStatus: {
+    planned: "Запланировано",
+    active: "Активно",
+    completed: "Завершено",
+    cancelled: "Отменено"
+  }
+};
+
+function enumLabel(group, value) {
+  const normalized = value == null ? "" : String(value);
+  return enumLabels[group]?.[normalized] || normalized;
 }
 
 function toIsoOrNull(value) {
@@ -183,23 +230,26 @@ function hideAllScreens() {
   document.querySelectorAll(".screen").forEach((item) => item.classList.add("hidden"));
 }
 
+function closeCreatePanels() {
+  ["event-create-panel", "task-create-panel", "resource-create-panel", "allocation-create-panel", "ai-create-panel"].forEach((id) => {
+    const panel = document.getElementById(id);
+    if (panel) panel.classList.add("hidden");
+  });
+}
+
 function setScreen(screenId) {
   if (!state.token || el.protectedContent.classList.contains("hidden")) {
     el.screenTitle.textContent = "Авторизация";
     return;
   }
   state.currentScreen = screenId;
-  if (screenId === "users" && state.role !== "admin" && state.participantsModeEventId == null) {
-    notify("Страница пользователей доступна из карточки мероприятия", true);
-    state.currentScreen = "events";
-    screenId = "events";
-  }
   if (screenId !== "users") {
     state.participantsModeEventId = null;
   }
   state.detailView = null;
   state.detailEventId = null;
   state.detailBackTarget = null;
+  closeCreatePanels();
   hideAllScreens();
   document.getElementById(`${screenId}-screen`).classList.remove("hidden");
   document.querySelectorAll(".nav-item").forEach((btn) => {
@@ -266,6 +316,12 @@ function updateTopbarActions() {
         populateTaskEventOptions(selectedId);
         void loadAssigneeOptions(selectedId);
       }
+      if (cfg.panel === "resource-create-panel" && !panel.classList.contains("hidden")) {
+        populateResourceEventOptions();
+      }
+      if (cfg.panel === "ai-create-panel" && !panel.classList.contains("hidden")) {
+        populateAiEventOptions();
+      }
     }
   });
   container.appendChild(btn);
@@ -312,13 +368,33 @@ function renderDashboard() {
   el.overdueCount.textContent = String(overdue);
 }
 
+function populateResourceEventOptions(selectedEventId = null) {
+  if (!el.resourceEventSelect) return;
+  const options = ['<option value="">Выберите мероприятие</option>'];
+  state.events.forEach((event) => {
+    const isSelected = selectedEventId != null && Number(selectedEventId) === event.id;
+    options.push(`<option value="${event.id}" ${isSelected ? "selected" : ""}>${escapeHtml(formatEventLabel(event))}</option>`);
+  });
+  el.resourceEventSelect.innerHTML = options.join("");
+}
+
+function populateAiEventOptions(selectedEventId = null) {
+  if (!el.aiEventSelect) return;
+  const options = ['<option value="">Выберите мероприятие</option>'];
+  state.events.forEach((event) => {
+    const isSelected = selectedEventId != null && Number(selectedEventId) === event.id;
+    options.push(`<option value="${event.id}" ${isSelected ? "selected" : ""}>${escapeHtml(formatEventLabel(event))}</option>`);
+  });
+  el.aiEventSelect.innerHTML = options.join("");
+}
+
 function renderEvents() {
   renderList(el.eventsList, state.events, (event) => `
     <p class="list-item-title">
       <button type="button" class="entity-link" data-entity-link="event" data-id="${event.id}">
         #${event.id} ${escapeHtml(event.title)}
       </button>
-      <span class="badge">${event.status}</span>
+      <span class="badge">${enumLabel("eventStatus", event.status)}</span>
     </p>
     <p class="list-item-meta">Сроки: ${new Date(event.start_time).toLocaleString()} - ${new Date(event.end_time).toLocaleString()}</p>
     <p class="list-item-meta">Бюджет: ${event.budget ?? 0}</p>
@@ -331,8 +407,8 @@ function renderTasks() {
       <button type="button" class="entity-link" data-entity-link="task" data-id="${task.id}">
         #${task.id} ${escapeHtml(task.title)}
       </button>
-      <span class="badge">${task.status}</span>
-      <span class="badge">${task.priority}</span>
+      <span class="badge">${enumLabel("taskStatus", task.status)}</span>
+      <span class="badge">${enumLabel("taskPriority", task.priority)}</span>
       ${task.status === "overdue" ? '<span class="badge badge-danger">Просрочено</span>' : ""}
     </p>
     <p class="list-item-meta">Мероприятие: #${task.event_id} | Исполнитель: ${task.assignee_id ?? "не назначен"}</p>
@@ -346,7 +422,7 @@ function renderResources() {
       <button type="button" class="entity-link" data-entity-link="resource" data-id="${resource.id}">
         #${resource.id} ${escapeHtml(resource.name)}
       </button>
-      <span class="badge">${resource.type}</span>
+      <span class="badge">${enumLabel("resourceType", resource.type)}</span>
     </p>
     <p class="list-item-meta">Мероприятие: #${resource.event_id} | Кол-во: ${resource.quantity}</p>
     <p class="list-item-meta">Стоимость/час: ${resource.cost_per_hour ?? "не указано"}</p>
@@ -362,14 +438,16 @@ function renderUsers() {
 
   renderList(el.usersList, state.usersList, (user) => `
     <p class="list-item-title">#${user.id} ${escapeHtml(user.first_name)} ${escapeHtml(user.last_name)}</p>
+    <p class="list-item-meta">Роль: ${enumLabel("participantRole", user.role || "viewer")}</p>
     <p class="list-item-meta">Специализация: ${escapeHtml(user.speciality || "не указана")}</p>
+    ${state.role === "admin" ? `<p class="list-item-meta">Email: ${escapeHtml(user.email || "—")} | Телефон: ${escapeHtml(user.phone || "—")}</p>` : ""}
     ${
       inParticipantMode
         ? `<div class="detail-actions">
             <select data-user-role-select="${user.id}">
-              <option value="organizer">organizer</option>
-              <option value="executor">executor</option>
-              <option value="viewer">viewer</option>
+              <option value="organizer">${enumLabel("participantRole", "organizer")}</option>
+              <option value="executor">${enumLabel("participantRole", "executor")}</option>
+              <option value="viewer">${enumLabel("participantRole", "viewer")}</option>
             </select>
             <button class="btn btn-inline" type="button" data-add-participant-user="${user.id}">Добавить в мероприятие</button>
           </div>`
@@ -452,13 +530,49 @@ async function loadAssigneeOptions(eventId, selectedAssigneeId = null) {
     candidateIds.forEach((id) => params.append("ids", String(id)));
     const profiles = await apiRequest(`${API.users}/public/by-ids?${params.toString()}`);
     profiles.forEach((profile) => {
+      if (!["organizer", "executor"].includes(profile.role)) {
+        return;
+      }
       const option = document.createElement("option");
       option.value = String(profile.id);
-      option.textContent = `${profile.first_name} ${profile.last_name} (#${profile.id})`;
+      option.textContent = `${profile.first_name} ${profile.last_name} (${enumLabel("participantRole", profile.role)})`;
       if (selectedAssigneeId != null && Number(selectedAssigneeId) === profile.id) {
         option.selected = true;
       }
       el.taskAssigneeSelect.appendChild(option);
+    });
+  } catch (error) {
+    notify(`Не удалось загрузить исполнителей: ${error.message}`, true);
+  }
+}
+
+async function loadTaskEditAssigneeOptions(eventId, selectedAssigneeId = null) {
+  const select = document.getElementById("task-edit-assignee-select");
+  if (!select) return;
+  select.innerHTML = '<option value="">Без исполнителя</option>';
+  if (!eventId) return;
+  try {
+    const participants = await apiRequest(`${API.events}${eventId}/participants`);
+    const candidateIds = Array.from(
+      new Set(
+        (participants || [])
+          .filter((item) => ["owner", "organizer", "executor"].includes(item.role))
+          .map((item) => item.user_id)
+      )
+    );
+    if (!candidateIds.length) return;
+    const params = new URLSearchParams();
+    candidateIds.forEach((id) => params.append("ids", String(id)));
+    const profiles = await apiRequest(`${API.users}/public/by-ids?${params.toString()}`);
+    profiles.forEach((profile) => {
+      if (!["organizer", "executor"].includes(profile.role)) return;
+      const option = document.createElement("option");
+      option.value = String(profile.id);
+      option.textContent = `${profile.first_name} ${profile.last_name} (${enumLabel("participantRole", profile.role)})`;
+      if (selectedAssigneeId != null && Number(selectedAssigneeId) === profile.id) {
+        option.selected = true;
+      }
+      select.appendChild(option);
     });
   } catch (error) {
     notify(`Не удалось загрузить исполнителей: ${error.message}`, true);
@@ -612,6 +726,8 @@ async function refreshData() {
   renderUsers();
   renderDashboard();
   populateTaskEventOptions(state.taskCreatePresetEventId);
+  populateResourceEventOptions();
+  populateAiEventOptions();
   populateAllocationEventOptions(state.allocationPreset.eventId);
   populateAllocationTaskOptions(state.allocationPreset.eventId, state.allocationPreset.taskId);
   populateAllocationResourceOptions(state.allocationPreset.eventId, state.allocationPreset.resourceId);
@@ -636,8 +752,14 @@ async function loadUsers() {
   if (state.usersSearch.q) params.set("q", state.usersSearch.q);
   if (state.usersSearch.speciality) params.set("speciality", state.usersSearch.speciality);
   try {
-    const list = await apiRequest(`${API.users}/public?${params.toString()}`);
+    const list =
+      state.role === "admin"
+        ? await apiRequest(`${API.users}/?${params.toString()}`)
+        : await apiRequest(`${API.users}/public?${params.toString()}`);
     state.usersList = Array.isArray(list) ? list : [];
+    if (state.role !== "admin") {
+      state.usersList = state.usersList.filter((item) => item.role !== "admin");
+    }
     renderUsers();
   } catch (error) {
     notify(`Ошибка загрузки пользователей: ${error.message}`, true);
@@ -677,6 +799,8 @@ async function openEventDetail(eventId) {
   try {
     const event = await apiRequest(`${API.events}${eventId}`);
     const tasks = await apiRequest(`${API.tasks}event/${eventId}`);
+    const participants = await apiRequest(`${API.events}${eventId}/participants`);
+    const eventResources = state.resources.filter((resource) => resource.event_id === eventId);
     const depResults = await Promise.allSettled(
       tasks.map((t) => apiRequest(`${API.tasks}${t.id}/dependency-ids`))
     );
@@ -687,7 +811,7 @@ async function openEventDetail(eventId) {
     });
 
     el.screenTitle.textContent = event.title || `Мероприятие #${eventId}`;
-    renderEventDetailCard(event, tasks, depMap);
+    renderEventDetailCard(event, tasks, depMap, participants, eventResources);
     notify("Готово");
   } catch (error) {
     notify(error.message, true);
@@ -695,7 +819,7 @@ async function openEventDetail(eventId) {
   }
 }
 
-function renderEventDetailCard(event, tasks, depMap) {
+function renderEventDetailCard(event, tasks, depMap, participants, eventResources) {
   const root = document.getElementById("event-detail-root");
   const canManage = canCreate();
   const taskById = Object.fromEntries(tasks.map((t) => [t.id, t]));
@@ -721,13 +845,42 @@ function renderEventDetailCard(event, tasks, depMap) {
             <button type="button" class="entity-link" data-entity-link="task" data-id="${t.id}" data-return-event="${event.id}">
               #${t.id} ${escapeHtml(t.title)}
             </button>
-            <span class="badge">${t.status}</span>
-            <span class="badge">${t.priority}</span>
+            <span class="badge">${enumLabel("taskStatus", t.status)}</span>
+            <span class="badge">${enumLabel("taskPriority", t.priority)}</span>
           </p>
           <p class="list-item-meta">Дедлайн: ${new Date(t.deadline).toLocaleString()}</p>
           <div class="deps-block">Зависит от: ${depText}</div>
         </article>`;
           })
+          .join("");
+  const participantsBlock =
+    !participants || participants.length === 0
+      ? '<p class="list-item-meta">Участников пока нет.</p>'
+      : participants
+          .map(
+            (participant) => `
+        <article class="list-item">
+          <p class="list-item-title">Пользователь #${participant.user_id}</p>
+          <p class="list-item-meta">Роль в мероприятии: ${enumLabel("participantRole", participant.role)}</p>
+        </article>`
+          )
+          .join("");
+  const resourcesBlock =
+    !eventResources || eventResources.length === 0
+      ? '<p class="list-item-meta">Ресурсов пока нет.</p>'
+      : eventResources
+          .map(
+            (resource) => `
+        <article class="list-item">
+          <p class="list-item-title">
+            <button type="button" class="entity-link" data-entity-link="resource" data-id="${resource.id}">
+              #${resource.id} ${escapeHtml(resource.name)}
+            </button>
+            <span class="badge">${enumLabel("resourceType", resource.type)}</span>
+          </p>
+          <p class="list-item-meta">Количество: ${resource.quantity} | Стоимость/час: ${resource.cost_per_hour ?? "—"}</p>
+        </article>`
+          )
           .join("");
 
   const editSection = canManage
@@ -750,10 +903,10 @@ function renderEventDetailCard(event, tasks, depMap) {
           <label>Бюджет<input type="number" step="0.01" name="budget" value="${event.budget ?? 0}" /></label>
           <label>Статус
             <select name="status">
-              <option value="draft" ${event.status === "draft" ? "selected" : ""}>draft</option>
-              <option value="published" ${event.status === "published" ? "selected" : ""}>published</option>
-              <option value="cancelled" ${event.status === "cancelled" ? "selected" : ""}>cancelled</option>
-              <option value="completed" ${event.status === "completed" ? "selected" : ""}>completed</option>
+              <option value="draft" ${event.status === "draft" ? "selected" : ""}>${enumLabel("eventStatus", "draft")}</option>
+              <option value="published" ${event.status === "published" ? "selected" : ""}>${enumLabel("eventStatus", "published")}</option>
+              <option value="cancelled" ${event.status === "cancelled" ? "selected" : ""}>${enumLabel("eventStatus", "cancelled")}</option>
+              <option value="completed" ${event.status === "completed" ? "selected" : ""}>${enumLabel("eventStatus", "completed")}</option>
             </select>
           </label>
           <button class="btn btn-primary" type="submit">Сохранить</button>
@@ -770,7 +923,7 @@ function renderEventDetailCard(event, tasks, depMap) {
     <div class="panel">
       <dl class="detail-dl">
         <dt>ID</dt><dd>${event.id}</dd>
-        <dt>Статус</dt><dd>${event.status}</dd>
+        <dt>Статус</dt><dd>${enumLabel("eventStatus", event.status)}</dd>
         <dt>Владелец</dt><dd>${event.owner_id}</dd>
         <dt>Начало</dt><dd>${new Date(event.start_time).toLocaleString()}</dd>
         <dt>Окончание</dt><dd>${new Date(event.end_time).toLocaleString()}</dd>
@@ -781,6 +934,14 @@ function renderEventDetailCard(event, tasks, depMap) {
       <p class="list-item-meta" style="margin-top:12px">${escapeHtml(event.description || "Без описания")}</p>
     </div>
     ${editSection}
+    <div class="panel">
+      <h3>Участники мероприятия</h3>
+      ${participantsBlock}
+    </div>
+    <div class="panel">
+      <h3>Используемые ресурсы</h3>
+      ${resourcesBlock}
+    </div>
     <div class="panel">
       <h3>Задачи и зависимости</h3>
       ${tasksBlock}
@@ -816,6 +977,10 @@ async function onEventEditSubmit(event, eventId) {
   payload.budget = payload.budget ? Number(payload.budget) : 0;
   payload.start_time = toIsoOrNull(payload.start_time);
   payload.end_time = toIsoOrNull(payload.end_time);
+  if (payload.start_time && payload.end_time && new Date(payload.end_time) < new Date(payload.start_time)) {
+    notify("Дата окончания мероприятия не может быть раньше даты начала", true);
+    return;
+  }
   if (!payload.description) payload.description = null;
   if (!payload.location) payload.location = null;
 
@@ -885,7 +1050,7 @@ function renderTaskDetailCard(task) {
   const statusSelect = (name, current, options = ["todo", "in_progress", "done", "overdue", "blocked"]) => `
     <select name="${name}">
       ${options
-        .map((option) => `<option value="${option}" ${current === option ? "selected" : ""}>${option}</option>`)
+        .map((option) => `<option value="${option}" ${current === option ? "selected" : ""}>${enumLabel("taskStatus", option)}</option>`)
         .join("")}
     </select>`;
 
@@ -905,12 +1070,16 @@ function renderTaskDetailCard(task) {
           <label>Статус ${statusSelect("status", task.status)}</label>
           <label>Приоритет
             <select name="priority">
-              <option value="low" ${task.priority === "low" ? "selected" : ""}>low</option>
-              <option value="medium" ${task.priority === "medium" ? "selected" : ""}>medium</option>
-              <option value="high" ${task.priority === "high" ? "selected" : ""}>high</option>
+              <option value="low" ${task.priority === "low" ? "selected" : ""}>${enumLabel("taskPriority", "low")}</option>
+              <option value="medium" ${task.priority === "medium" ? "selected" : ""}>${enumLabel("taskPriority", "medium")}</option>
+              <option value="high" ${task.priority === "high" ? "selected" : ""}>${enumLabel("taskPriority", "high")}</option>
             </select>
           </label>
-          <label>Исполнитель (id профиля)<input name="assignee_id" value="${task.assignee_id ?? ""}" placeholder="пусто — не назначен" /></label>
+          <label>Исполнитель
+            <select name="assignee_id" id="task-edit-assignee-select">
+              <option value="">Без исполнителя</option>
+            </select>
+          </label>
           <label>Дедлайн<input type="datetime-local" name="deadline" required value="${toDatetimeLocalValue(task.deadline)}" /></label>
           <label>Старт (план)<input type="datetime-local" name="start_time" required value="${toDatetimeLocalValue(task.start_time)}" /></label>
           <label>Окончание (план)<input type="datetime-local" name="end_time" required value="${toDatetimeLocalValue(task.end_time)}" /></label>
@@ -944,8 +1113,8 @@ function renderTaskDetailCard(task) {
       <p class="list-item-meta">Мероприятие: <button type="button" class="entity-link" data-entity-link="event" data-id="${task.event_id}">#${task.event_id}</button></p>
       <dl class="detail-dl">
         <dt>ID</dt><dd>${task.id}</dd>
-        <dt>Статус</dt><dd>${task.status}</dd>
-        <dt>Приоритет</dt><dd>${task.priority}</dd>
+        <dt>Статус</dt><dd>${enumLabel("taskStatus", task.status)}</dd>
+        <dt>Приоритет</dt><dd>${enumLabel("taskPriority", task.priority)}</dd>
         <dt>Исполнитель</dt><dd>${task.assignee_id ?? "—"}</dd>
         <dt>Владелец</dt><dd>${task.owner_id}</dd>
         <dt>Дедлайн</dt><dd>${new Date(task.deadline).toLocaleString()}</dd>
@@ -957,6 +1126,7 @@ function renderTaskDetailCard(task) {
   `;
 
   if (mode === "full" && canManage) {
+    void loadTaskEditAssigneeOptions(task.event_id, task.assignee_id);
     document.getElementById("task-open-allocation-btn").addEventListener("click", () => {
       openAllocationCreatePanel({ eventId: task.event_id, taskId: task.id });
     });
@@ -1072,7 +1242,7 @@ function renderResourceDetailCard(resource) {
           .map(
             (a) => `
     <article class="list-item">
-      <p class="list-item-title">Выделение #${a.id} <span class="badge">${a.status}</span></p>
+      <p class="list-item-title">Выделение #${a.id} <span class="badge">${enumLabel("allocationStatus", a.status)}</span></p>
       <p class="list-item-meta">Задача: ${a.task_id ?? "—"} | ${new Date(a.date_start).toLocaleString()} — ${new Date(a.date_end).toLocaleString()}</p>
     </article>`
           )
@@ -1091,10 +1261,10 @@ function renderResourceDetailCard(resource) {
           <label>Название<input name="name" required value="${escapeHtml(resource.name)}" /></label>
           <label>Тип
             <select name="type">
-              <option value="equipment" ${resource.type === "equipment" ? "selected" : ""}>equipment</option>
-              <option value="venue" ${resource.type === "venue" ? "selected" : ""}>venue</option>
-              <option value="personnel" ${resource.type === "personnel" ? "selected" : ""}>personnel</option>
-              <option value="material" ${resource.type === "material" ? "selected" : ""}>material</option>
+              <option value="equipment" ${resource.type === "equipment" ? "selected" : ""}>${enumLabel("resourceType", "equipment")}</option>
+              <option value="venue" ${resource.type === "venue" ? "selected" : ""}>${enumLabel("resourceType", "venue")}</option>
+              <option value="personnel" ${resource.type === "personnel" ? "selected" : ""}>${enumLabel("resourceType", "personnel")}</option>
+              <option value="material" ${resource.type === "material" ? "selected" : ""}>${enumLabel("resourceType", "material")}</option>
             </select>
           </label>
           <label>Описание<textarea name="description" rows="2">${escapeHtml(resource.description || "")}</textarea></label>
@@ -1115,7 +1285,7 @@ function renderResourceDetailCard(resource) {
       <p class="list-item-meta">Мероприятие: <button type="button" class="entity-link" data-entity-link="event" data-id="${resource.event_id}">#${resource.event_id}</button></p>
       <dl class="detail-dl">
         <dt>ID</dt><dd>${resource.id}</dd>
-        <dt>Тип</dt><dd>${resource.type}</dd>
+        <dt>Тип</dt><dd>${enumLabel("resourceType", resource.type)}</dd>
         <dt>Владелец</dt><dd>${resource.owner_id}</dd>
         <dt>Количество</dt><dd>${resource.quantity}</dd>
         <dt>Стоимость/час</dt><dd>${resource.cost_per_hour ?? "—"}</dd>
@@ -1246,6 +1416,10 @@ async function onEventCreate(event) {
   payload.budget = payload.budget ? Number(payload.budget) : 0;
   payload.start_time = toIsoOrNull(payload.start_time);
   payload.end_time = toIsoOrNull(payload.end_time);
+  if (payload.start_time && payload.end_time && new Date(payload.end_time) < new Date(payload.start_time)) {
+    notify("Дата окончания мероприятия не может быть раньше даты начала", true);
+    return;
+  }
 
   try {
     await apiRequest(API.events, {
@@ -1391,6 +1565,10 @@ async function onResourceCreate(event) {
   const form = event.target;
   const payload = serializeForm(form);
   payload.event_id = Number(payload.event_id);
+  if (!payload.event_id) {
+    notify("Выберите мероприятие для ресурса", true);
+    return;
+  }
   payload.quantity = Number(payload.quantity);
   payload.cost_per_hour = payload.cost_per_hour ? Number(payload.cost_per_hour) : null;
 
@@ -1412,6 +1590,16 @@ async function onAiGenerate(event) {
   const form = event.target;
   const payload = serializeForm(form);
   payload.event_id = Number(payload.event_id);
+  if (!payload.event_id) {
+    notify("Выберите мероприятие для AI генерации", true);
+    return;
+  }
+  const submitBtn = form.querySelector('button[type="submit"]');
+  const originalText = submitBtn ? submitBtn.textContent : "";
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Генерация...";
+  }
 
   try {
     const result = await apiRequest(`${API.ai}/generate`, {
@@ -1431,6 +1619,11 @@ async function onAiGenerate(event) {
     await refreshData();
   } catch (error) {
     notify(`Ошибка AI генерации: ${error.message}`, true);
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalText || "Сгенерировать";
+    }
   }
 }
 
@@ -1455,6 +1648,12 @@ async function onProfileCreate(event) {
 function bindEvents() {
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.addEventListener("click", () => setScreen(btn.dataset.screen));
+  });
+  document.querySelectorAll(".metric-card[data-screen-target]").forEach((card) => {
+    card.style.cursor = "pointer";
+    card.addEventListener("click", () => {
+      setScreen(card.dataset.screenTarget);
+    });
   });
 
   el.protectedContent.addEventListener("click", onProtectedClick);

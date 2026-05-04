@@ -61,7 +61,10 @@ async def create_event(
         user_data: TokenData = Depends(get_current_user_data)
 ):
     check_event_create_permissions(user_data.role)
-    event=await event_crud.create(db=db, obj_in=event_in, owner_id=user_id)
+    try:
+        event=await event_crud.create(db=db, obj_in=event_in, owner_id=user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return event
 
 
@@ -118,7 +121,10 @@ async def update_event(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
     if user_data.role != "admin":
         await check_event_permissions(db, event.id, user_id)
-    return await event_crud.update(db, event_id, event_in)
+    try:
+        return await event_crud.update(db, event_id, event_in)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)

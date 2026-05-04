@@ -89,8 +89,8 @@ def build_task_payload_with_timing(
 
             sorted_tasks = [
                 TaskItem(
-                    **t.model_dump(),
-                    estimated_hours=max((t.estimated_hours or 1) * scale, 0.25)
+                    **t.model_dump(exclude={"estimated_hours"}),
+                    estimated_hours=max(round((t.estimated_hours or 1) * scale), 1)
                 )
                 for t in sorted_tasks
             ]
