@@ -9,6 +9,7 @@ const state = {
   detailEventId: null,
   detailBackTarget: null,
   taskCreatePresetEventId: null,
+  resourceCreatePresetEventId: null,
   usersSearch: { q: "", speciality: "" },
   usersList: [],
   participantsModeEventId: null,
@@ -145,6 +146,7 @@ function clearSession() {
   state.detailEventId = null;
   state.detailBackTarget = null;
   state.taskCreatePresetEventId = null;
+  state.resourceCreatePresetEventId = null;
   state.participantsModeEventId = null;
   state.allocationPreset = { eventId: null, taskId: null, resourceId: null };
   state.usersList = [];
@@ -179,12 +181,13 @@ function taskDetailMode(task) {
 }
 
 async function apiRequest(url, options = {}) {
-  const headers = {
-    "Content-Type": "application/json",
-    ...(options.headers || {})
-  };
+  const headers = { ...(options.headers || {}) };
   if (state.token) {
     headers.Authorization = `Bearer ${state.token}`;
+  }
+  const hasBody = options.body !== undefined && options.body !== null;
+  if (hasBody && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
   }
   let response;
   try {
@@ -221,7 +224,8 @@ function screenName(screenId) {
     tasks: "Задачи",
     resources: "Ресурсы",
     users: "Пользователи",
-    ai: "AI помощник"
+    ai: "AI помощник",
+    "profile-cabinet": "Профиль"
   };
   return map[screenId] || "Обзор";
 }
@@ -235,6 +239,13 @@ function closeCreatePanels() {
     const panel = document.getElementById(id);
     if (panel) panel.classList.add("hidden");
   });
+}
+
+function formatDateTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString();
 }
 
 function setScreen(screenId) {
@@ -259,6 +270,9 @@ function setScreen(screenId) {
   updateTopbarActions();
   if (screenId === "users") {
     void loadUsers();
+  }
+  if (screenId === "profile-cabinet") {
+    void loadProfileCabinet();
   }
 }
 
@@ -370,12 +384,23 @@ function renderDashboard() {
 
 function populateResourceEventOptions(selectedEventId = null) {
   if (!el.resourceEventSelect) return;
+  const effectiveSelected = selectedEventId ?? state.resourceCreatePresetEventId;
   const options = ['<option value="">Выберите мероприятие</option>'];
   state.events.forEach((event) => {
-    const isSelected = selectedEventId != null && Number(selectedEventId) === event.id;
+    const isSelected = effectiveSelected != null && Number(effectiveSelected) === event.id;
     options.push(`<option value="${event.id}" ${isSelected ? "selected" : ""}>${escapeHtml(formatEventLabel(event))}</option>`);
   });
   el.resourceEventSelect.innerHTML = options.join("");
+}
+
+function openResourceCreateForEvent(eventId) {
+  state.resourceCreatePresetEventId = eventId;
+  setScreen("resources");
+  const panel = document.getElementById("resource-create-panel");
+  if (panel) {
+    panel.classList.remove("hidden");
+  }
+  populateResourceEventOptions(eventId);
 }
 
 function populateAiEventOptions(selectedEventId = null) {
@@ -819,6 +844,87 @@ async function openEventDetail(eventId) {
   }
 }
 
+function buildMermaidDependencyGraph(tasks, depMap) {
+  const taskIds = new Set(tasks.map((task) => task.id));
+  const nodes = tasks.map((task) => {
+    const safeTitle = String(task.title || "").replace(/"/g, '\\"').slice(0, 60);
+    return `task_${task.id}["#${task.id}: ${safeTitle}"]`;
+  });
+  const edges = [];
+  tasks.forEach((task) => {
+    (depMap[task.id] || []).forEach((dependsOnId) => {
+      if (taskIds.has(dependsOnId)) {
+        edges.push(`task_${dependsOnId} --> task_${task.id}`);
+      }
+    });
+  });
+  if (!edges.length) return "";
+  return ["graph LR", ...nodes, ...edges].join("\n");
+}
+
+function buildEventTimeline(tasks, event) {
+  const datedTasks = (tasks || [])
+    .filter((task) => task.start_time && task.end_time)
+    .map((task) => ({ task, start: new Date(task.start_time).getTime(), end: new Date(task.end_time).getTime() }))
+    .filter((entry) => Number.isFinite(entry.start) && Number.isFinite(entry.end) && entry.end > entry.start);
+
+  if (!datedTasks.length) {
+    return '<p class="list-item-meta">Нет задач с валидными плановыми датами для построения таймлайна.</p>';
+  }
+
+  const eventStart = event?.start_time ? new Date(event.start_time).getTime() : null;
+  const eventEnd = event?.end_time ? new Date(event.end_time).getTime() : null;
+  const minStart = Number.isFinite(eventStart) ? eventStart : Math.min(...datedTasks.map((x) => x.start));
+  const maxEnd = Number.isFinite(eventEnd) ? eventEnd : Math.max(...datedTasks.map((x) => x.end));
+  const span = Math.max(maxEnd - minStart, 1);
+
+  const rows = datedTasks
+    .sort((a, b) => a.start - b.start)
+    .map(({ task, start, end }) => {
+      const left = ((start - minStart) / span) * 100;
+      const width = Math.max(((end - start) / span) * 100, 1.5);
+      return `
+      <div class="timeline-row">
+        <div class="timeline-task-title">#${task.id} ${escapeHtml(task.title)}</div>
+        <div class="timeline-track">
+          <div class="timeline-bar" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></div>
+        </div>
+        <div class="timeline-task-meta">${formatDateTime(task.start_time)} — ${formatDateTime(task.end_time)}</div>
+      </div>`;
+    })
+    .join("");
+
+  return `
+    <div class="timeline-head">
+      <span>${formatDateTime(new Date(minStart).toISOString())}</span>
+      <span>${formatDateTime(new Date(maxEnd).toISOString())}</span>
+    </div>
+    <div class="timeline-grid">${rows}</div>
+  `;
+}
+
+async function renderEventDependencyMermaid(tasks, depMap) {
+  const root = document.getElementById("event-dependency-graph-root");
+  if (!root) return;
+  const graphDef = buildMermaidDependencyGraph(tasks, depMap);
+  if (!graphDef) {
+    root.innerHTML = '<p class="list-item-meta">Зависимостей между задачами нет.</p>';
+    return;
+  }
+  if (!window.mermaid) {
+    root.innerHTML = '<p class="list-item-meta">Граф недоступен: Mermaid не загружен.</p>';
+    return;
+  }
+  try {
+    window.mermaid.initialize({ startOnLoad: false, securityLevel: "loose" });
+    const renderId = `event_dep_graph_${Date.now()}`;
+    const result = await window.mermaid.render(renderId, graphDef);
+    root.innerHTML = result.svg;
+  } catch (error) {
+    root.innerHTML = '<p class="list-item-meta">Не удалось отрисовать граф зависимостей.</p>';
+  }
+}
+
 function renderEventDetailCard(event, tasks, depMap, participants, eventResources) {
   const root = document.getElementById("event-detail-root");
   const canManage = canCreate();
@@ -848,11 +954,13 @@ function renderEventDetailCard(event, tasks, depMap, participants, eventResource
             <span class="badge">${enumLabel("taskStatus", t.status)}</span>
             <span class="badge">${enumLabel("taskPriority", t.priority)}</span>
           </p>
-          <p class="list-item-meta">Дедлайн: ${new Date(t.deadline).toLocaleString()}</p>
+          <p class="list-item-meta">План: ${formatDateTime(t.start_time)} — ${formatDateTime(t.end_time)}</p>
+          <p class="list-item-meta">Дедлайн: ${formatDateTime(t.deadline)}</p>
           <div class="deps-block">Зависит от: ${depText}</div>
         </article>`;
           })
           .join("");
+  const timelineBlock = buildEventTimeline(tasks, event);
   const participantsBlock =
     !participants || participants.length === 0
       ? '<p class="list-item-meta">Участников пока нет.</p>'
@@ -888,6 +996,7 @@ function renderEventDetailCard(event, tasks, depMap, participants, eventResource
     <div class="panel">
       <div class="detail-actions">
         <button type="button" class="btn btn-muted btn-inline" id="event-open-task-create-btn">+ Создать задачу</button>
+        <button type="button" class="btn btn-muted btn-inline" id="event-open-resource-create-btn">+ Создать ресурс</button>
         <button type="button" class="btn btn-muted btn-inline" id="event-open-users-btn">+ Добавить участника</button>
         <button type="button" class="btn btn-muted btn-inline" id="event-open-allocation-btn">+ Создать выделение ресурса</button>
         <button type="button" class="btn btn-muted btn-inline" id="event-toggle-edit-btn">Редактировать</button>
@@ -946,12 +1055,25 @@ function renderEventDetailCard(event, tasks, depMap, participants, eventResource
       <h3>Задачи и зависимости</h3>
       ${tasksBlock}
     </div>
+    <div class="panel">
+      <h3>Граф зависимостей задач</h3>
+      <div id="event-dependency-graph-root">
+        <p class="list-item-meta">Построение графа…</p>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>План задач (таймлайн)</h3>
+      ${timelineBlock}
+    </div>
   `;
 
   if (canManage) {
     document.getElementById("event-open-task-create-btn").addEventListener("click", () => {
       state.taskCreatePresetEventId = event.id;
       void presetTaskCreateForEvent(event.id);
+    });
+    document.getElementById("event-open-resource-create-btn").addEventListener("click", () => {
+      openResourceCreateForEvent(event.id);
     });
     document.getElementById("event-open-users-btn").addEventListener("click", () => {
       void openUsersForEventParticipants(event.id);
@@ -968,6 +1090,7 @@ function renderEventDetailCard(event, tasks, depMap, participants, eventResource
     document.getElementById("event-edit-form").addEventListener("submit", (e) => onEventEditSubmit(e, event.id));
     document.getElementById("event-delete-btn").addEventListener("click", () => onEventDelete(event.id));
   }
+  void renderEventDependencyMermaid(tasks, depMap);
 }
 
 async function onEventEditSubmit(event, eventId) {
@@ -1034,7 +1157,17 @@ async function openTaskDetail(taskId, opts = {}) {
   try {
     const task = await apiRequest(`${API.tasks}${taskId}`);
     el.screenTitle.textContent = task.title || `Задача #${taskId}`;
-    renderTaskDetailCard(task);
+    let dependsOn = [];
+    const mode = taskDetailMode(task);
+    if (mode === "full" && canCreate()) {
+      try {
+        const depPayload = await apiRequest(`${API.tasks}${taskId}/dependency-ids`);
+        dependsOn = Array.isArray(depPayload?.depends_on) ? depPayload.depends_on : [];
+      } catch (depErr) {
+        notify(`Не удалось загрузить зависимости: ${depErr.message}`, true);
+      }
+    }
+    renderTaskDetailCard(task, dependsOn);
     notify("Готово");
   } catch (error) {
     notify(error.message, true);
@@ -1042,10 +1175,46 @@ async function openTaskDetail(taskId, opts = {}) {
   }
 }
 
-function renderTaskDetailCard(task) {
+function buildTaskDependenciesPanel(task, dependsOnIds) {
+  const inEvent = state.tasks.filter((t) => t.event_id === task.event_id);
+  const taskById = Object.fromEntries(inEvent.map((t) => [t.id, t]));
+  const listBlock =
+    dependsOnIds.length === 0
+      ? '<p class="list-item-meta">Нет зависимостей.</p>'
+      : `<ul class="list">${dependsOnIds
+          .map((did) => {
+            const t = taskById[did];
+            const label = t ? `#${did} — ${escapeHtml(t.title)}` : `#${did}`;
+            return `<li class="list-item" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>${label}</span><button type="button" class="btn btn-muted btn-inline task-dep-remove-btn" data-depends-on="${did}">Удалить</button></li>`;
+          })
+          .join("")}</ul>`;
+
+  const candidates = inEvent.filter(
+    (t) => t.id !== task.id && !dependsOnIds.includes(t.id)
+  );
+  const selectOpts =
+    '<option value="">Выберите задачу-предшественник</option>' +
+    candidates
+      .map((t) => `<option value="${t.id}">#${t.id} — ${escapeHtml(t.title)}</option>`)
+      .join("");
+
+  return `
+    <div class="panel" style="margin-top:12px" id="task-deps-panel">
+      <h3>Зависимости</h3>
+      <p class="list-item-meta">Текущая задача зависит от выбранных задач того же мероприятия (их нужно завершить раньше).</p>
+      ${listBlock}
+      <div class="detail-actions" style="margin-top:12px;flex-wrap:wrap;gap:8px">
+        <select id="task-dep-add-select" style="min-width:220px">${selectOpts}</select>
+        <button type="button" class="btn btn-primary" id="task-dep-add-btn">Добавить зависимость</button>
+      </div>
+    </div>`;
+}
+
+function renderTaskDetailCard(task, dependsOnIds = []) {
   const root = document.getElementById("task-detail-root");
   const mode = taskDetailMode(task);
   const canManage = canCreate();
+  const depsSection = mode === "full" && canManage ? buildTaskDependenciesPanel(task, dependsOnIds) : "";
 
   const statusSelect = (name, current, options = ["todo", "in_progress", "done", "overdue", "blocked"]) => `
     <select name="${name}">
@@ -1080,9 +1249,9 @@ function renderTaskDetailCard(task) {
               <option value="">Без исполнителя</option>
             </select>
           </label>
-          <label>Дедлайн<input type="datetime-local" name="deadline" required value="${toDatetimeLocalValue(task.deadline)}" /></label>
           <label>Старт (план)<input type="datetime-local" name="start_time" required value="${toDatetimeLocalValue(task.start_time)}" /></label>
           <label>Окончание (план)<input type="datetime-local" name="end_time" required value="${toDatetimeLocalValue(task.end_time)}" /></label>
+          <label>Дедлайн<input type="datetime-local" name="deadline" required value="${toDatetimeLocalValue(task.deadline)}" /></label>
           <button class="btn btn-primary" type="submit">Сохранить</button>
         </form>
         <div class="detail-actions" style="margin-top:12px">
@@ -1122,10 +1291,21 @@ function renderTaskDetailCard(task) {
       </dl>
       <p class="list-item-meta" style="margin-top:12px">${escapeHtml(task.description || "Без описания")}</p>
     </div>
+    ${depsSection}
     ${editSection}
   `;
 
   if (mode === "full" && canManage) {
+    const depPanel = document.getElementById("task-deps-panel");
+    if (depPanel) {
+      depPanel.querySelectorAll(".task-dep-remove-btn").forEach((btn) => {
+        btn.addEventListener("click", () => onTaskDependencyRemove(task.id, Number(btn.dataset.dependsOn)));
+      });
+      const addBtn = document.getElementById("task-dep-add-btn");
+      if (addBtn) {
+        addBtn.addEventListener("click", () => onTaskDependencyAdd(task.id));
+      }
+    }
     void loadTaskEditAssigneeOptions(task.event_id, task.assignee_id);
     document.getElementById("task-open-allocation-btn").addEventListener("click", () => {
       openAllocationCreatePanel({ eventId: task.event_id, taskId: task.id });
@@ -1187,6 +1367,47 @@ async function onTaskStatusSubmit(event, taskId) {
     await refreshData();
   } catch (error) {
     notify(`Ошибка: ${error.message}`, true);
+  }
+}
+
+function taskDetailReopenOpts() {
+  return {
+    returnToEventId: state.detailBackTarget?.kind === "event" ? state.detailBackTarget.id : undefined
+  };
+}
+
+async function onTaskDependencyAdd(taskId) {
+  const sel = document.getElementById("task-dep-add-select");
+  if (!sel || !sel.value) {
+    notify("Выберите задачу-предшественник", true);
+    return;
+  }
+  const dependsOn = Number(sel.value);
+  try {
+    await apiRequest(`${API.tasks}${taskId}/dependencies/${dependsOn}`, { method: "POST" });
+    notify("Зависимость добавлена");
+    await openTaskDetail(taskId, taskDetailReopenOpts());
+    if (state.detailBackTarget?.kind === "event") {
+      const eventTasks = await apiRequest(`${API.tasks}event/${state.detailBackTarget.id}`);
+      if (Array.isArray(eventTasks)) state.tasks = eventTasks;
+    }
+  } catch (error) {
+    notify(`Не удалось добавить зависимость: ${error.message}`, true);
+  }
+}
+
+async function onTaskDependencyRemove(taskId, dependsOnTaskId) {
+  if (!confirm("Удалить эту зависимость?")) return;
+  try {
+    await apiRequest(`${API.tasks}${taskId}/dependencies/${dependsOnTaskId}`, { method: "DELETE" });
+    notify("Зависимость удалена");
+    await openTaskDetail(taskId, taskDetailReopenOpts());
+    if (state.detailBackTarget?.kind === "event") {
+      const eventTasks = await apiRequest(`${API.tasks}event/${state.detailBackTarget.id}`);
+      if (Array.isArray(eventTasks)) state.tasks = eventTasks;
+    }
+  } catch (error) {
+    notify(`Не удалось удалить зависимость: ${error.message}`, true);
   }
 }
 
@@ -1645,6 +1866,118 @@ async function onProfileCreate(event) {
   }
 }
 
+function setCabinetEditMode(mode) {
+  const profileForm = document.getElementById("profile-cabinet-form");
+  const accountForm = document.getElementById("account-cabinet-form");
+  const openProfileBtn = document.getElementById("cabinet-open-profile-edit-btn");
+  const openAccountBtn = document.getElementById("cabinet-open-account-edit-btn");
+  if (!profileForm || !accountForm || !openProfileBtn || !openAccountBtn) return;
+  profileForm.classList.toggle("hidden", mode !== "profile");
+  accountForm.classList.toggle("hidden", mode !== "account");
+  openProfileBtn.classList.toggle("hidden", mode === "profile");
+  openAccountBtn.classList.toggle("hidden", mode === "account");
+}
+
+async function loadProfileCabinet() {
+  if (!state.token) return;
+  setCabinetEditMode(null);
+  const emailEl = document.getElementById("cabinet-auth-email-display");
+  try {
+    const me = await apiRequest(`${API.users}/me`);
+    state.profileId = me.id;
+    const setText = (id, value) => {
+      const node = document.getElementById(id);
+      if (node) node.textContent = value || "—";
+    };
+    setText("cabinet-view-first-name", me.first_name);
+    setText("cabinet-view-last-name", me.last_name);
+    setText("cabinet-view-phone", me.phone);
+    setText("cabinet-view-speciality", me.speciality);
+    setText("cabinet-view-bio", me.bio);
+    if (emailEl) {
+      emailEl.textContent = me.email || state.email || "—";
+    }
+
+    const profileForm = document.getElementById("profile-cabinet-form");
+    if (profileForm) {
+      profileForm.first_name.value = me.first_name || "";
+      profileForm.last_name.value = me.last_name || "";
+      profileForm.phone.value = me.phone || "";
+      profileForm.speciality.value = me.speciality || "";
+      profileForm.bio.value = me.bio || "";
+    }
+  } catch (error) {
+    if (emailEl) emailEl.textContent = state.email || "—";
+    notify(`Не удалось загрузить профиль: ${error.message}`, true);
+  }
+}
+
+async function onProfileCabinetSave(event) {
+  event.preventDefault();
+  if (!state.profileId) {
+    notify("Сначала создайте профиль", true);
+    return;
+  }
+  const form = event.target;
+  const payload = serializeForm(form);
+  payload.phone = payload.phone?.trim() || null;
+  payload.speciality = payload.speciality?.trim() || null;
+  payload.bio = payload.bio?.trim() || null;
+  try {
+    await apiRequest(`${API.users}/${state.profileId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+    notify("Профиль сохранён");
+    setCabinetEditMode(null);
+    await loadProfileCabinet();
+    await refreshData();
+  } catch (error) {
+    notify(`Ошибка сохранения профиля: ${error.message}`, true);
+  }
+}
+
+async function onAccountCabinetSave(event) {
+  event.preventDefault();
+  const form = event.target;
+  const raw = serializeForm(form);
+  const emailTrim = raw.email?.trim() || "";
+  const newPassword = raw.new_password?.trim() || "";
+  const currentPassword = raw.current_password?.trim() || "";
+
+  if (!emailTrim && !newPassword) {
+    notify("Укажите новый email и/или новый пароль", true);
+    return;
+  }
+  if (!currentPassword) {
+    notify("Введите текущий пароль", true);
+    return;
+  }
+
+  const payload = { current_password: currentPassword };
+  if (emailTrim) payload.email = emailTrim;
+  if (newPassword) payload.new_password = newPassword;
+
+  try {
+    const result = await apiRequest(`${API.auth}/me`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    });
+    notify(result.message || "Учётная запись обновлена");
+    form.reset();
+    if (result.access_token) {
+      const nextEmail = emailTrim || state.email;
+      saveSession(result.access_token, nextEmail);
+      syncAuthUi();
+    }
+    setCabinetEditMode(null);
+    await loadProfileCabinet();
+    await refreshData();
+  } catch (error) {
+    notify(`Ошибка учётной записи: ${error.message}`, true);
+  }
+}
+
 function bindEvents() {
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.addEventListener("click", () => setScreen(btn.dataset.screen));
@@ -1666,6 +1999,27 @@ function bindEvents() {
   document.getElementById("login-form").addEventListener("submit", onLoginSubmit);
   document.getElementById("register-form").addEventListener("submit", onRegisterSubmit);
   document.getElementById("profile-form").addEventListener("submit", onProfileCreate);
+  document.getElementById("profile-cabinet-form").addEventListener("submit", (e) => {
+    void onProfileCabinetSave(e);
+  });
+  document.getElementById("account-cabinet-form").addEventListener("submit", (e) => {
+    void onAccountCabinetSave(e);
+  });
+  document.getElementById("session-profile-btn").addEventListener("click", () => {
+    setScreen("profile-cabinet");
+  });
+  document.getElementById("cabinet-open-profile-edit-btn").addEventListener("click", () => {
+    setCabinetEditMode("profile");
+  });
+  document.getElementById("cabinet-cancel-profile-edit-btn").addEventListener("click", () => {
+    setCabinetEditMode(null);
+  });
+  document.getElementById("cabinet-open-account-edit-btn").addEventListener("click", () => {
+    setCabinetEditMode("account");
+  });
+  document.getElementById("cabinet-cancel-account-edit-btn").addEventListener("click", () => {
+    setCabinetEditMode(null);
+  });
   document.getElementById("auth-tab-login").addEventListener("click", () => setAuthView("login"));
   document.getElementById("auth-tab-register").addEventListener("click", () => setAuthView("register"));
   document.getElementById("event-form").addEventListener("submit", onEventCreate);

@@ -28,6 +28,7 @@
 
       <div class="session-card">
         <p class="session-email" id="session-email">Не авторизован</p>
+        <button id="session-profile-btn" class="btn btn-muted">Профиль</button>
         <button id="logout-btn" class="btn btn-muted">Выйти</button>
       </div>
     </aside>
@@ -144,9 +145,9 @@
                 <option value="high">Высокий</option>
               </select>
             </label>
-            <label>Дедлайн<input name="deadline" type="datetime-local" required></label>
             <label>Плановый старт<input name="start_time" type="datetime-local" required></label>
             <label>Плановое окончание<input name="end_time" type="datetime-local" required></label>
+            <label>Дедлайн<input name="deadline" type="datetime-local" required></label>
             <label>Описание задачи<textarea name="description" placeholder="Описание задачи"></textarea></label>
             <button class="btn" type="submit">Создать задачу</button>
           </form>
@@ -247,6 +248,51 @@
         </div>
       </section>
 
+      <section id="profile-cabinet-screen" class="screen hidden">
+        <div class="panel">
+          <h2>Профиль пользователя</h2>
+          <p class="list-item-meta">ФИО, контакты и описание хранятся в user-service.</p>
+          <dl class="detail-dl">
+            <dt>Имя</dt><dd id="cabinet-view-first-name">—</dd>
+            <dt>Фамилия</dt><dd id="cabinet-view-last-name">—</dd>
+            <dt>Телефон</dt><dd id="cabinet-view-phone">—</dd>
+            <dt>Специализация</dt><dd id="cabinet-view-speciality">—</dd>
+            <dt>О себе</dt><dd id="cabinet-view-bio">—</dd>
+          </dl>
+          <div class="detail-actions" style="margin-top:12px">
+            <button type="button" id="cabinet-open-profile-edit-btn" class="btn btn-muted btn-inline">Редактировать профиль</button>
+          </div>
+          <form id="profile-cabinet-form" class="form-grid hidden" style="margin-top:12px">
+            <label>Имя<input name="first_name" required autocomplete="given-name"></label>
+            <label>Фамилия<input name="last_name" required autocomplete="family-name"></label>
+            <label>Телефон<input name="phone" type="tel" autocomplete="tel"></label>
+            <label>Специализация<input name="speciality" autocomplete="organization-title"></label>
+            <label>О себе<textarea name="bio" rows="3" placeholder="Кратко о себе"></textarea></label>
+            <div class="detail-actions">
+              <button type="submit" class="btn btn-primary">Сохранить профиль</button>
+              <button type="button" id="cabinet-cancel-profile-edit-btn" class="btn btn-muted btn-inline">Отмена</button>
+            </div>
+          </form>
+        </div>
+        <div class="panel">
+          <h2>Учётная запись</h2>
+          <p class="list-item-meta">Email и пароль — в auth-service. При смене email он обновляется и в профиле.</p>
+          <p class="list-item-meta">Текущий email в системе: <strong id="cabinet-auth-email-display">—</strong></p>
+          <div class="detail-actions">
+            <button type="button" id="cabinet-open-account-edit-btn" class="btn btn-muted btn-inline">Изменить email/пароль</button>
+          </div>
+          <form id="account-cabinet-form" class="form-grid hidden" style="margin-top:12px">
+            <label>Новый email (необязательно)<input name="email" type="email" autocomplete="email" placeholder="Оставьте пустым, если не меняете"></label>
+            <label>Новый пароль (необязательно)<input name="new_password" type="password" minlength="8" autocomplete="new-password" placeholder="Минимум 8 символов"></label>
+            <label>Текущий пароль<input name="current_password" type="password" autocomplete="current-password" placeholder="Нужен для смены email или пароля"></label>
+            <div class="detail-actions">
+              <button type="submit" class="btn btn-primary">Сохранить учётную запись</button>
+              <button type="button" id="cabinet-cancel-account-edit-btn" class="btn btn-muted btn-inline">Отмена</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
       <section id="event-detail-screen" class="screen hidden">
         <div id="event-detail-root" class="detail-stack"></div>
       </section>
@@ -261,6 +307,7 @@
       </div>
     </main>
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

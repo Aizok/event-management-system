@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from ....core.database import get_db
-from ....core.security import get_current_user_id
+from ....core.security import get_current_profile_id, get_current_user_data
 from ....crud.task_dependency import task_dependency_crud
 from ....crud.task import task_crud
 from ....schemas.task_dependency import TaskDependencyResponse, TaskDependencyListResponse
+from ....schemas.task import TokenData, TokenRole
 from ....core.permissions import check_task_permissions
 
 
@@ -16,7 +17,8 @@ async def create_dependency(
         task_id: int,
         depends_on_task_id: int,
         db: AsyncSession=Depends(get_db),
-        user_id: int=Depends(get_current_user_id)
+        profile_id: int=Depends(get_current_profile_id),
+        user_data: TokenData=Depends(get_current_user_data),
 ):
     task=await task_crud.get(db, task_id)
     depends_on=await task_crud.get(db, depends_on_task_id)
@@ -26,8 +28,9 @@ async def create_dependency(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
-    await check_task_permissions(task, user_id)
-    await check_task_permissions(depends_on, user_id)
+    if user_data.role != TokenRole.ADMIN:
+        await check_task_permissions(task, profile_id)
+        await check_task_permissions(depends_on, profile_id)
 
     if task.event_id != depends_on.event_id:
         raise HTTPException(
@@ -64,7 +67,8 @@ async def create_dependency(
 async def get_dependencies(
         task_id: int,
         db: AsyncSession=Depends(get_db),
-        user_id: int=Depends(get_current_user_id)
+        profile_id: int=Depends(get_current_profile_id),
+        user_data: TokenData=Depends(get_current_user_data),
 ):
     task=await task_crud.get(db, task_id)
     if not task:
@@ -72,7 +76,8 @@ async def get_dependencies(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
-    await check_task_permissions(task, user_id)
+    if user_data.role != TokenRole.ADMIN:
+        await check_task_permissions(task, profile_id)
 
     deps=await task_dependency_crud.get_dependencies(db, task_id)
     return deps
@@ -82,7 +87,8 @@ async def get_dependencies(
 async def get_dependency_ids(
         task_id: int,
         db: AsyncSession=Depends(get_db),
-        user_id: int=Depends(get_current_user_id)
+        profile_id: int=Depends(get_current_profile_id),
+        user_data: TokenData=Depends(get_current_user_data),
 ):
     task=await task_crud.get(db, task_id)
     if not task:
@@ -90,7 +96,8 @@ async def get_dependency_ids(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
-    await check_task_permissions(task, user_id)
+    if user_data.role != TokenRole.ADMIN:
+        await check_task_permissions(task, profile_id)
 
     deps=await task_dependency_crud.get_dependency_ids(db, task_id)
     return TaskDependencyListResponse(task_id=task_id, depends_on=deps)
@@ -101,7 +108,8 @@ async def delete_dependency(
         task_id: int,
         depends_on_task_id: int,
         db: AsyncSession = Depends(get_db),
-        user_id: int = Depends(get_current_user_id)
+        profile_id: int = Depends(get_current_profile_id),
+        user_data: TokenData = Depends(get_current_user_data),
 ):
     task=await task_crud.get(db, task_id)
     if not task:
@@ -109,7 +117,8 @@ async def delete_dependency(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
-    await check_task_permissions(task, user_id)
+    if user_data.role != TokenRole.ADMIN:
+        await check_task_permissions(task, profile_id)
     success=await task_dependency_crud.delete(db, task_id, depends_on_task_id)
     if not success:
         raise HTTPException(

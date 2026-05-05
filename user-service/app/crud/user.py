@@ -30,6 +30,11 @@ class UserCRUD:
         result=await db.execute(query)
         return result.scalar_one_or_none()
 
+    async def get_by_email(self, db: AsyncSession, email: str) -> Optional[UserProfile]:
+        query = select(UserProfile).where(func.lower(UserProfile.email) == func.lower(email.strip()))
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
     async def get_multi(self, db: AsyncSession, skip: int = 0, limit: int = 100) -> List[UserProfile]:
         query=select(UserProfile).offset(skip).limit(limit).order_by(UserProfile.created_at.desc())
         result=await db.execute(query)

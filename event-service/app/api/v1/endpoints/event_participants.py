@@ -130,10 +130,26 @@ async def get_participant(
 
 @router.get("/{event_id}/participants", response_model=List[EventParticipantResponse])
 async def get_participants(
-        db: AsyncSession=Depends(get_db),
-        current:EventParticipant=Depends(get_current_participant)
+        event_id: int,
+        db: AsyncSession = Depends(get_db),
+        auth_user_id: int = Depends(get_current_user_id),
+        token_data: TokenData = Depends(get_current_user_data),
 ):
-    return await event_participant_crud.get_participants_by_event(db, current.event_id)
+    event = await event_crud.get(db, event_id)
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found"
+        )
+    if token_data.role != "admin":
+        current_profile_id = await get_user_profile_id(auth_user_id)
+        current_participant = await event_participant_crud.get_participant(db, event_id, current_profile_id)
+        if not current_participant:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User is not a participant of this event"
+            )
+    return await event_participant_crud.get_participants_by_event(db, event_id)
 
 
 @router.delete("/{event_id}/participants/{participant_user_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
@@ -19,6 +19,10 @@ router=APIRouter()
 class ServiceTokenRequest(BaseModel):
     service_name: str
     service_secret: str
+
+
+class EmailSyncRequest(BaseModel):
+    email: EmailStr
 
 
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -123,6 +127,33 @@ async def get_user_internal_by_auth(
     }
 
 
+@router.patch("/internal/by-auth/{auth_user_id}/email")
+async def internal_sync_email_by_auth(
+        auth_user_id: int,
+        body: EmailSyncRequest,
+        db: AsyncSession = Depends(get_db),
+        service: TokenData = Depends(get_current_service),
+):
+    _ = service
+    profile = await user_crud.get_by_auth_user_id(db, auth_user_id)
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User profile not found",
+        )
+    new_email = body.email.lower().strip()
+    other = await user_crud.get_by_email(db, new_email)
+    if other and other.id != profile.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already in use in user profiles",
+        )
+    profile.email = new_email
+    await db.commit()
+    await db.refresh(profile)
+    return {"ok": True, "email": profile.email}
+
+
 @router.get("/me", response_model=UserResponse)
 async def read_own_profile(
     db: AsyncSession = Depends(get_db),
@@ -134,7 +165,20 @@ async def read_own_profile(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User profile not found"
         )
-    return profile
+    role = await get_user_role_from_auth(profile.auth_user_id)
+    return UserResponse(
+        id=profile.id,
+        auth_user_id=profile.auth_user_id,
+        email=profile.email,
+        first_name=profile.first_name,
+        last_name=profile.last_name,
+        phone=profile.phone,
+        speciality=profile.speciality,
+        bio=profile.bio,
+        role=role,
+        created_at=profile.created_at,
+        updated_at=profile.updated_at,
+    )
 
 
 @router.get("/public/by-ids", response_model=List[UserPublicWithRoleResponse])

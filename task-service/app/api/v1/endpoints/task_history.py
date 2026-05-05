@@ -2,14 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from ....core.database import get_db
-from ....core.security import get_current_user_id
+from ....core.security import get_current_profile_id, get_current_user_data
 from ....crud.task_history import task_history_crud
 from ....crud.task import task_crud
 from ....schemas.task_history import TaskHistoryResponse
-from ....core.permissions import check_task_permissions, ALLOWED_ROLES
-from ....core.auth_client import is_admin
-from ....core.event_client import get_user_events_with_roles
-from ....core.event_client import get_user_role_in_event
+from ....schemas.task import TokenData, TokenRole
+from ....core.permissions import check_task_permissions
 
 
 router=APIRouter()
@@ -19,13 +17,15 @@ router=APIRouter()
 async def get_task_history(
         task_id: int,
         db: AsyncSession=Depends(get_db),
-        user_id: int=Depends(get_current_user_id)
+        profile_id: int=Depends(get_current_profile_id),
+        user_data: TokenData=Depends(get_current_user_data),
 ):
     task=await task_crud.get(db, task_id)
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
-    await check_task_permissions(task, user_id)
+    if user_data.role != TokenRole.ADMIN:
+        await check_task_permissions(task, profile_id)
     history=await task_history_crud.get_by_task(db, task_id)
     return history
 
@@ -35,12 +35,14 @@ async def delete_history(
         task_id: int,
         history_id: int,
         db: AsyncSession=Depends(get_db),
-        user_id: int=Depends(get_current_user_id)
+        profile_id: int=Depends(get_current_profile_id),
+        user_data: TokenData=Depends(get_current_user_data),
 ):
     task=await task_crud.get(db, task_id)
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-    await check_task_permissions(task, user_id)
+    if user_data.role != TokenRole.ADMIN:
+        await check_task_permissions(task, profile_id)
 
     history=await task_history_crud.get(db, history_id)
     if not history:

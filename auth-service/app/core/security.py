@@ -100,3 +100,17 @@ def get_current_service(token_data: TokenData = Depends(get_current_user_data)):
     if token_data.role != "service":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Service access required")
     return token_data
+
+
+def get_current_user_id(token_data: TokenData = Depends(get_current_user_data)) -> int:
+    if token_data.role == TokenRole.SERVICE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Service token cannot access this endpoint",
+        )
+    if token_data.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+        )
+    return token_data.user_id
