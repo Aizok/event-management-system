@@ -10,7 +10,7 @@ const state = {
   detailBackTarget: null,
   taskCreatePresetEventId: null,
   resourceCreatePresetEventId: null,
-  usersSearch: { q: "", speciality: "" },
+  usersSearch: { id: "", q: "", speciality: "" },
   usersList: [],
   participantsModeEventId: null,
   allocationPreset: { eventId: null, taskId: null, resourceId: null },
@@ -43,6 +43,8 @@ const el = {
   tasksList: document.getElementById("tasks-list"),
   resourcesList: document.getElementById("resources-list"),
   usersList: document.getElementById("users-list"),
+  usersAddEventSelect: document.getElementById("users-add-event-select"),
+  usersAddRoleSelect: document.getElementById("users-add-role-select"),
   usersModeHint: document.getElementById("users-mode-hint"),
   aiResult: document.getElementById("ai-result"),
   protectedContent: document.getElementById("protected-content"),
@@ -53,6 +55,8 @@ const el = {
   allocationEventSelect: document.getElementById("allocation-event-select"),
   allocationTaskSelect: document.getElementById("allocation-task-select"),
   allocationResourceSelect: document.getElementById("allocation-resource-select")
+  ,
+  userDetailRoot: document.getElementById("user-detail-root")
 };
 
 function notify(text, isError = false) {
@@ -150,7 +154,7 @@ function clearSession() {
   state.participantsModeEventId = null;
   state.allocationPreset = { eventId: null, taskId: null, resourceId: null };
   state.usersList = [];
-  state.usersSearch = { q: "", speciality: "" };
+  state.usersSearch = { id: "", q: "", speciality: "" };
   localStorage.removeItem("ems_token");
   localStorage.removeItem("ems_email");
 }
@@ -225,7 +229,8 @@ function screenName(screenId) {
     resources: "Ресурсы",
     users: "Пользователи",
     ai: "AI помощник",
-    "profile-cabinet": "Профиль"
+    "profile-cabinet": "Профиль",
+    "user-detail": "Пользователь"
   };
   return map[screenId] || "Обзор";
 }
@@ -246,6 +251,28 @@ function formatDateTime(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString();
+}
+
+function setFormError(form, message = "") {
+  if (!form) return;
+  let node = form.querySelector(".form-error");
+  if (!node) {
+    node = document.createElement("p");
+    node.className = "form-error";
+    form.appendChild(node);
+  }
+  node.textContent = message;
+  node.classList.toggle("hidden", !message);
+}
+
+function populateUsersAddEventOptions(selectedEventId = null) {
+  if (!el.usersAddEventSelect) return;
+  const options = ['<option value="">Выберите мероприятие для добавления</option>'];
+  state.events.forEach((event) => {
+    const selected = selectedEventId != null && Number(selectedEventId) === event.id ? "selected" : "";
+    options.push(`<option value="${event.id}" ${selected}>${escapeHtml(formatEventLabel(event))}</option>`);
+  });
+  el.usersAddEventSelect.innerHTML = options.join("");
 }
 
 function setScreen(screenId) {
@@ -456,18 +483,31 @@ function renderResources() {
 
 function renderUsers() {
   const inParticipantMode = state.participantsModeEventId != null;
+  const canManageParticipants = canCreate();
+  const controls = document.getElementById("users-add-controls");
+  if (controls) controls.classList.toggle("hidden", !canManageParticipants);
   el.usersModeHint.classList.toggle("hidden", !inParticipantMode);
   el.usersModeHint.textContent = inParticipantMode
     ? `Режим добавления участников для мероприятия #${state.participantsModeEventId}`
     : "Список пользователей";
+  if (el.usersAddEventSelect) {
+    el.usersAddEventSelect.disabled = inParticipantMode;
+  }
+  if (el.usersAddRoleSelect) {
+    el.usersAddRoleSelect.disabled = false;
+  }
 
   renderList(el.usersList, state.usersList, (user) => `
-    <p class="list-item-title">#${user.id} ${escapeHtml(user.first_name)} ${escapeHtml(user.last_name)}</p>
+    <p class="list-item-title">
+      <button type="button" class="entity-link" data-entity-link="user" data-id="${user.id}">
+        #${user.id} ${escapeHtml(user.first_name)} ${escapeHtml(user.last_name)}
+      </button>
+    </p>
     <p class="list-item-meta">Роль: ${enumLabel("participantRole", user.role || "viewer")}</p>
     <p class="list-item-meta">Специализация: ${escapeHtml(user.speciality || "не указана")}</p>
     ${state.role === "admin" ? `<p class="list-item-meta">Email: ${escapeHtml(user.email || "—")} | Телефон: ${escapeHtml(user.phone || "—")}</p>` : ""}
     ${
-      inParticipantMode
+      canManageParticipants
         ? `<div class="detail-actions">
             <select data-user-role-select="${user.id}">
               <option value="organizer">${enumLabel("participantRole", "organizer")}</option>
@@ -774,6 +814,7 @@ async function refreshData() {
 async function loadUsers() {
   if (!state.token) return;
   const params = new URLSearchParams();
+  if (state.usersSearch.id) params.set("id", state.usersSearch.id);
   if (state.usersSearch.q) params.set("q", state.usersSearch.q);
   if (state.usersSearch.speciality) params.set("speciality", state.usersSearch.speciality);
   try {
@@ -784,6 +825,14 @@ async function loadUsers() {
     state.usersList = Array.isArray(list) ? list : [];
     if (state.role !== "admin") {
       state.usersList = state.usersList.filter((item) => item.role !== "admin");
+    }
+    if (state.usersSearch.id) {
+      const wantedId = Number(state.usersSearch.id);
+      state.usersList = state.usersList.filter((item) => item.id === wantedId);
+    }
+    populateUsersAddEventOptions(state.participantsModeEventId);
+    if (el.usersAddEventSelect) {
+      el.usersAddEventSelect.value = state.participantsModeEventId ? String(state.participantsModeEventId) : "";
     }
     renderUsers();
   } catch (error) {
@@ -825,6 +874,17 @@ async function openEventDetail(eventId) {
     const event = await apiRequest(`${API.events}${eventId}`);
     const tasks = await apiRequest(`${API.tasks}event/${eventId}`);
     const participants = await apiRequest(`${API.events}${eventId}/participants`);
+    let participantProfiles = {};
+    if (Array.isArray(participants) && participants.length) {
+      const params = new URLSearchParams();
+      Array.from(new Set(participants.map((p) => p.user_id))).forEach((id) => params.append("ids", String(id)));
+      try {
+        const profiles = await apiRequest(`${API.users}/public/by-ids?${params.toString()}`);
+        participantProfiles = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
+      } catch (err) {
+        participantProfiles = {};
+      }
+    }
     const eventResources = state.resources.filter((resource) => resource.event_id === eventId);
     const depResults = await Promise.allSettled(
       tasks.map((t) => apiRequest(`${API.tasks}${t.id}/dependency-ids`))
@@ -836,7 +896,7 @@ async function openEventDetail(eventId) {
     });
 
     el.screenTitle.textContent = event.title || `Мероприятие #${eventId}`;
-    renderEventDetailCard(event, tasks, depMap, participants, eventResources);
+    renderEventDetailCard(event, tasks, depMap, participants, participantProfiles, eventResources);
     notify("Готово");
   } catch (error) {
     notify(error.message, true);
@@ -878,28 +938,36 @@ function buildEventTimeline(tasks, event) {
   const maxEnd = Number.isFinite(eventEnd) ? eventEnd : Math.max(...datedTasks.map((x) => x.end));
   const span = Math.max(maxEnd - minStart, 1);
 
-  const rows = datedTasks
+  const hourStep = 60 * 60 * 1000;
+  const startHour = Math.floor(minStart / hourStep) * hourStep;
+  const endHour = Math.ceil(maxEnd / hourStep) * hourStep;
+  const ticks = [];
+  for (let t = startHour; t <= endHour; t += hourStep) {
+    const top = ((t - minStart) / span) * 100;
+    ticks.push(`<div class="event-vertical-tick" style="top:${top.toFixed(2)}%"><span>${formatDateTime(new Date(t).toISOString())}</span></div>`);
+  }
+
+  const items = datedTasks
     .sort((a, b) => a.start - b.start)
     .map(({ task, start, end }) => {
-      const left = ((start - minStart) / span) * 100;
-      const width = Math.max(((end - start) / span) * 100, 1.5);
+      const top = ((start - minStart) / span) * 100;
+      const height = Math.max(((end - start) / span) * 100, 2.5);
       return `
-      <div class="timeline-row">
-        <div class="timeline-task-title">#${task.id} ${escapeHtml(task.title)}</div>
-        <div class="timeline-track">
-          <div class="timeline-bar" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></div>
-        </div>
-        <div class="timeline-task-meta">${formatDateTime(task.start_time)} — ${formatDateTime(task.end_time)}</div>
-      </div>`;
+        <div class="event-vertical-item" style="top:${top.toFixed(2)}%;height:${height.toFixed(2)}%">
+          <div class="event-vertical-bar"></div>
+          <div class="event-vertical-content">
+            <p class="event-vertical-title">#${task.id} ${escapeHtml(task.title)}</p>
+            <p class="event-vertical-meta">${formatDateTime(task.start_time)} — ${formatDateTime(task.end_time)}</p>
+          </div>
+        </div>`;
     })
     .join("");
 
   return `
-    <div class="timeline-head">
-      <span>${formatDateTime(new Date(minStart).toISOString())}</span>
-      <span>${formatDateTime(new Date(maxEnd).toISOString())}</span>
+    <div class="event-vertical-timeline">
+      <div class="event-vertical-axis">${ticks.join("")}</div>
+      <div class="event-vertical-track">${items}</div>
     </div>
-    <div class="timeline-grid">${rows}</div>
   `;
 }
 
@@ -925,7 +993,7 @@ async function renderEventDependencyMermaid(tasks, depMap) {
   }
 }
 
-function renderEventDetailCard(event, tasks, depMap, participants, eventResources) {
+function renderEventDetailCard(event, tasks, depMap, participants, participantProfiles, eventResources) {
   const root = document.getElementById("event-detail-root");
   const canManage = canCreate();
   const taskById = Object.fromEntries(tasks.map((t) => [t.id, t]));
@@ -968,7 +1036,15 @@ function renderEventDetailCard(event, tasks, depMap, participants, eventResource
           .map(
             (participant) => `
         <article class="list-item">
-          <p class="list-item-title">Пользователь #${participant.user_id}</p>
+          <p class="list-item-title">
+            <button type="button" class="entity-link" data-entity-link="user" data-id="${participant.user_id}">
+              ${escapeHtml(
+                participantProfiles?.[participant.user_id]
+                  ? `${participantProfiles[participant.user_id].first_name} ${participantProfiles[participant.user_id].last_name}`
+                  : `Пользователь #${participant.user_id}`
+              )}
+            </button>
+          </p>
           <p class="list-item-meta">Роль в мероприятии: ${enumLabel("participantRole", participant.role)}</p>
         </article>`
           )
@@ -1096,12 +1172,13 @@ function renderEventDetailCard(event, tasks, depMap, participants, eventResource
 async function onEventEditSubmit(event, eventId) {
   event.preventDefault();
   const form = event.target;
+  setFormError(form, "");
   const payload = serializeForm(form);
   payload.budget = payload.budget ? Number(payload.budget) : 0;
   payload.start_time = toIsoOrNull(payload.start_time);
   payload.end_time = toIsoOrNull(payload.end_time);
   if (payload.start_time && payload.end_time && new Date(payload.end_time) < new Date(payload.start_time)) {
-    notify("Дата окончания мероприятия не может быть раньше даты начала", true);
+    setFormError(form, "Дата окончания мероприятия не может быть раньше даты начала");
     return;
   }
   if (!payload.description) payload.description = null;
@@ -1116,6 +1193,7 @@ async function onEventEditSubmit(event, eventId) {
     await openEventDetail(eventId);
     await refreshData();
   } catch (error) {
+    setFormError(form, `Ошибка сохранения: ${error.message}`);
     notify(`Ошибка сохранения: ${error.message}`, true);
   }
 }
@@ -1329,6 +1407,7 @@ function renderTaskDetailCard(task, dependsOnIds = []) {
 async function onTaskEditSubmit(event, taskId) {
   event.preventDefault();
   const form = event.target;
+  setFormError(form, "");
   const payload = serializeForm(form);
   payload.assignee_id = payload.assignee_id ? Number(payload.assignee_id) : null;
   payload.deadline = toIsoOrNull(payload.deadline);
@@ -1347,6 +1426,7 @@ async function onTaskEditSubmit(event, taskId) {
     });
     await refreshData();
   } catch (error) {
+    setFormError(form, `Ошибка сохранения: ${error.message}`);
     notify(`Ошибка сохранения: ${error.message}`, true);
   }
 }
@@ -1354,6 +1434,7 @@ async function onTaskEditSubmit(event, taskId) {
 async function onTaskStatusSubmit(event, taskId) {
   event.preventDefault();
   const form = event.target;
+  setFormError(form, "");
   const payload = { status: serializeForm(form).status };
   try {
     await apiRequest(`${API.tasks}${taskId}`, {
@@ -1366,6 +1447,7 @@ async function onTaskStatusSubmit(event, taskId) {
     });
     await refreshData();
   } catch (error) {
+    setFormError(form, `Ошибка: ${error.message}`);
     notify(`Ошибка: ${error.message}`, true);
   }
 }
@@ -1444,6 +1526,45 @@ async function openResourceDetail(resourceId) {
     const resource = await apiRequest(`${API.resources}${resourceId}`);
     el.screenTitle.textContent = resource.name || `Ресурс #${resourceId}`;
     renderResourceDetailCard(resource);
+    notify("Готово");
+  } catch (error) {
+    notify(error.message, true);
+    await closeDetailView();
+  }
+}
+
+async function openUserDetail(userId) {
+  state.detailBackTarget = null;
+  state.detailView = "user";
+  hideAllScreens();
+  document.getElementById("user-detail-screen").classList.remove("hidden");
+  el.screenTitle.textContent = "Пользователь";
+  updateTopbarActions();
+  notify("Загрузка…");
+  const root = el.userDetailRoot;
+  if (root) root.innerHTML = '<p class="list-item-meta">Загрузка…</p>';
+  try {
+    let user;
+    if (state.role === "admin") {
+      user = await apiRequest(`${API.users}/${userId}`);
+    } else {
+      const list = await apiRequest(`${API.users}/public/by-ids?ids=${userId}`);
+      user = Array.isArray(list) ? list[0] : null;
+    }
+    if (!user) throw new Error("Пользователь не найден");
+    el.screenTitle.textContent = `${user.first_name || ""} ${user.last_name || ""}`.trim() || `Пользователь #${userId}`;
+    root.innerHTML = `
+      <div class="panel">
+        <dl class="detail-dl">
+          <dt>ID</dt><dd>${user.id}</dd>
+          <dt>Имя</dt><dd>${escapeHtml(user.first_name || "—")}</dd>
+          <dt>Фамилия</dt><dd>${escapeHtml(user.last_name || "—")}</dd>
+          <dt>Специализация</dt><dd>${escapeHtml(user.speciality || "—")}</dd>
+          <dt>Роль</dt><dd>${enumLabel("participantRole", user.role || "viewer")}</dd>
+          ${state.role === "admin" ? `<dt>Email</dt><dd>${escapeHtml(user.email || "—")}</dd><dt>Телефон</dt><dd>${escapeHtml(user.phone || "—")}</dd>` : ""}
+        </dl>
+      </div>
+    `;
     notify("Готово");
   } catch (error) {
     notify(error.message, true);
@@ -1538,6 +1659,7 @@ function renderResourceDetailCard(resource) {
 async function onResourceEditSubmit(event, resourceId) {
   event.preventDefault();
   const form = event.target;
+  setFormError(form, "");
   const payload = serializeForm(form);
   payload.quantity = Number(payload.quantity);
   payload.cost_per_hour = payload.cost_per_hour ? Number(payload.cost_per_hour) : null;
@@ -1552,6 +1674,7 @@ async function onResourceEditSubmit(event, resourceId) {
     await openResourceDetail(resourceId);
     await refreshData();
   } catch (error) {
+    setFormError(form, `Ошибка сохранения: ${error.message}`);
     notify(`Ошибка сохранения: ${error.message}`, true);
   }
 }
@@ -1591,6 +1714,10 @@ function onProtectedClick(e) {
   }
   if (kind === "resource") {
     void openResourceDetail(id);
+    return;
+  }
+  if (kind === "user") {
+    void openUserDetail(id);
   }
 }
 
@@ -1633,12 +1760,13 @@ async function onRegisterSubmit(event) {
 async function onEventCreate(event) {
   event.preventDefault();
   const form = event.target;
+  setFormError(form, "");
   const payload = serializeForm(form);
   payload.budget = payload.budget ? Number(payload.budget) : 0;
   payload.start_time = toIsoOrNull(payload.start_time);
   payload.end_time = toIsoOrNull(payload.end_time);
   if (payload.start_time && payload.end_time && new Date(payload.end_time) < new Date(payload.start_time)) {
-    notify("Дата окончания мероприятия не может быть раньше даты начала", true);
+    setFormError(form, "Дата окончания мероприятия не может быть раньше даты начала");
     return;
   }
 
@@ -1651,6 +1779,7 @@ async function onEventCreate(event) {
     form.reset();
     await refreshData();
   } catch (error) {
+    setFormError(form, `Ошибка создания мероприятия: ${error.message}`);
     notify(`Ошибка создания мероприятия: ${error.message}`, true);
   }
 }
@@ -1658,11 +1787,12 @@ async function onEventCreate(event) {
 async function onTaskCreate(event) {
   event.preventDefault();
   const form = event.target;
+  setFormError(form, "");
   const payload = serializeForm(form);
 
   payload.event_id = Number(payload.event_id);
   if (!payload.event_id) {
-    notify("Выберите мероприятие", true);
+    setFormError(form, "Выберите мероприятие");
     return;
   }
   payload.assignee_id = payload.assignee_id ? Number(payload.assignee_id) : null;
@@ -1682,6 +1812,7 @@ async function onTaskCreate(event) {
     await loadAssigneeOptions(null);
     await refreshData();
   } catch (error) {
+    setFormError(form, `Ошибка создания задачи: ${error.message}`);
     notify(`Ошибка создания задачи: ${error.message}`, true);
   }
 }
@@ -1695,6 +1826,7 @@ async function onTaskEventChange(event) {
 async function onUsersSearchSubmit(event) {
   event.preventDefault();
   const payload = serializeForm(event.target);
+  state.usersSearch.id = (payload.id || "").trim();
   state.usersSearch.q = (payload.q || "").trim();
   state.usersSearch.speciality = (payload.speciality || "").trim();
   await loadUsers();
@@ -1703,15 +1835,19 @@ async function onUsersSearchSubmit(event) {
 async function onUsersListClick(event) {
   const addBtn = event.target.closest("[data-add-participant-user]");
   if (!addBtn) return;
-  if (!state.participantsModeEventId) return;
 
   const userId = Number(addBtn.dataset.addParticipantUser);
   if (!userId) return;
+  const targetEventId = state.participantsModeEventId || Number(el.usersAddEventSelect?.value || 0);
+  if (!targetEventId) {
+    notify("Выберите мероприятие для добавления участника", true);
+    return;
+  }
   const roleSelect = document.querySelector(`[data-user-role-select="${userId}"]`);
-  const role = roleSelect ? roleSelect.value : "viewer";
+  const role = roleSelect ? roleSelect.value : (el.usersAddRoleSelect?.value || "viewer");
 
   try {
-    await apiRequest(`${API.events}${state.participantsModeEventId}/participants`, {
+    await apiRequest(`${API.events}${targetEventId}/participants`, {
       method: "POST",
       body: JSON.stringify({ user_id: userId, role })
     });
@@ -1752,6 +1888,7 @@ function onAllocationTaskChange(event) {
 async function onAllocationCreate(event) {
   event.preventDefault();
   const form = event.target;
+  setFormError(form, "");
   const payload = serializeForm(form);
   const eventId = Number(payload.event_id);
   payload.task_id = payload.task_id ? Number(payload.task_id) : null;
@@ -1761,7 +1898,7 @@ async function onAllocationCreate(event) {
   payload.date_end = toIsoOrNull(payload.date_end);
 
   if (!eventId || !payload.resource_id || !payload.date_start || !payload.date_end) {
-    notify("Заполните обязательные поля выделения", true);
+    setFormError(form, "Заполните обязательные поля выделения");
     return;
   }
 
@@ -1777,6 +1914,7 @@ async function onAllocationCreate(event) {
     populateAllocationTaskOptions(null);
     populateAllocationResourceOptions(null);
   } catch (error) {
+    setFormError(form, `Ошибка создания выделения: ${error.message}`);
     notify(`Ошибка создания выделения: ${error.message}`, true);
   }
 }
@@ -1784,10 +1922,11 @@ async function onAllocationCreate(event) {
 async function onResourceCreate(event) {
   event.preventDefault();
   const form = event.target;
+  setFormError(form, "");
   const payload = serializeForm(form);
   payload.event_id = Number(payload.event_id);
   if (!payload.event_id) {
-    notify("Выберите мероприятие для ресурса", true);
+    setFormError(form, "Выберите мероприятие для ресурса");
     return;
   }
   payload.quantity = Number(payload.quantity);
@@ -1802,6 +1941,7 @@ async function onResourceCreate(event) {
     form.reset();
     await refreshData();
   } catch (error) {
+    setFormError(form, `Ошибка создания ресурса: ${error.message}`);
     notify(`Ошибка создания ресурса: ${error.message}`, true);
   }
 }
@@ -1809,10 +1949,11 @@ async function onResourceCreate(event) {
 async function onAiGenerate(event) {
   event.preventDefault();
   const form = event.target;
+  setFormError(form, "");
   const payload = serializeForm(form);
   payload.event_id = Number(payload.event_id);
   if (!payload.event_id) {
-    notify("Выберите мероприятие для AI генерации", true);
+    setFormError(form, "Выберите мероприятие для AI генерации");
     return;
   }
   const submitBtn = form.querySelector('button[type="submit"]');
@@ -1839,6 +1980,7 @@ async function onAiGenerate(event) {
     notify(`AI сгенерировал задач: ${(result.tasks || []).length}`);
     await refreshData();
   } catch (error) {
+    setFormError(form, `Ошибка AI генерации: ${error.message}`);
     notify(`Ошибка AI генерации: ${error.message}`, true);
   } finally {
     if (submitBtn) {
@@ -1914,11 +2056,12 @@ async function loadProfileCabinet() {
 
 async function onProfileCabinetSave(event) {
   event.preventDefault();
+  const form = event.target;
+  setFormError(form, "");
   if (!state.profileId) {
-    notify("Сначала создайте профиль", true);
+    setFormError(form, "Сначала создайте профиль");
     return;
   }
-  const form = event.target;
   const payload = serializeForm(form);
   payload.phone = payload.phone?.trim() || null;
   payload.speciality = payload.speciality?.trim() || null;
@@ -1933,6 +2076,7 @@ async function onProfileCabinetSave(event) {
     await loadProfileCabinet();
     await refreshData();
   } catch (error) {
+    setFormError(form, `Ошибка сохранения профиля: ${error.message}`);
     notify(`Ошибка сохранения профиля: ${error.message}`, true);
   }
 }
@@ -1940,17 +2084,18 @@ async function onProfileCabinetSave(event) {
 async function onAccountCabinetSave(event) {
   event.preventDefault();
   const form = event.target;
+  setFormError(form, "");
   const raw = serializeForm(form);
   const emailTrim = raw.email?.trim() || "";
   const newPassword = raw.new_password?.trim() || "";
   const currentPassword = raw.current_password?.trim() || "";
 
   if (!emailTrim && !newPassword) {
-    notify("Укажите новый email и/или новый пароль", true);
+    setFormError(form, "Укажите новый email и/или новый пароль");
     return;
   }
   if (!currentPassword) {
-    notify("Введите текущий пароль", true);
+    setFormError(form, "Введите текущий пароль");
     return;
   }
 
@@ -1974,6 +2119,7 @@ async function onAccountCabinetSave(event) {
     await loadProfileCabinet();
     await refreshData();
   } catch (error) {
+    setFormError(form, `Ошибка учётной записи: ${error.message}`);
     notify(`Ошибка учётной записи: ${error.message}`, true);
   }
 }
