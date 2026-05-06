@@ -218,10 +218,21 @@
         <div class="panel">
           <h2>Пользователи системы</h2>
           <form id="users-search-form" class="form-grid">
+            <input name="id" id="users-search-id" type="number" min="1" placeholder="Поиск по ID профиля">
             <input name="q" id="users-search-q" placeholder="Поиск по имени и фамилии">
             <input name="speciality" id="users-search-speciality" placeholder="Поиск по специализации">
             <button class="btn btn-inline" type="submit">Найти</button>
           </form>
+          <div id="users-add-controls" class="detail-actions" style="margin-top:10px">
+            <select id="users-add-event-select">
+              <option value="">Выберите мероприятие для добавления</option>
+            </select>
+            <select id="users-add-role-select">
+              <option value="organizer">Организатор</option>
+              <option value="executor">Исполнитель</option>
+              <option value="viewer">Наблюдатель</option>
+            </select>
+          </div>
           <p id="users-mode-hint" class="list-item-meta hidden"></p>
           <div id="users-list" class="list"></div>
         </div>
@@ -303,6 +314,10 @@
 
       <section id="resource-detail-screen" class="screen hidden">
         <div id="resource-detail-root" class="detail-stack"></div>
+      </section>
+
+      <section id="user-detail-screen" class="screen hidden">
+        <div id="user-detail-root" class="detail-stack"></div>
       </section>
       </div>
     </main>
