@@ -4,7 +4,7 @@ const state = {
   role: "",
   profileId: null,
   authView: "login",
-  currentScreen: "dashboard",
+  currentScreen: "events",
   detailView: null,
   detailEventId: null,
   detailBackTarget: null,
@@ -44,7 +44,6 @@ const el = {
   resourcesList: document.getElementById("resources-list"),
   usersList: document.getElementById("users-list"),
   usersAddEventSelect: document.getElementById("users-add-event-select"),
-  usersAddRoleSelect: document.getElementById("users-add-role-select"),
   usersModeHint: document.getElementById("users-mode-hint"),
   aiResult: document.getElementById("ai-result"),
   protectedContent: document.getElementById("protected-content"),
@@ -223,7 +222,6 @@ async function apiRequest(url, options = {}) {
 
 function screenName(screenId) {
   const map = {
-    dashboard: "Обзор",
     events: "Мероприятия",
     tasks: "Задачи",
     resources: "Ресурсы",
@@ -327,7 +325,7 @@ function updateTopbarActions() {
   }
 
   const can = canCreate();
-  if (!can || state.currentScreen === "dashboard") {
+  if (!can) {
     container.classList.add("hidden");
     return;
   }
@@ -488,13 +486,10 @@ function renderUsers() {
   if (controls) controls.classList.toggle("hidden", !canManageParticipants);
   el.usersModeHint.classList.toggle("hidden", !inParticipantMode);
   el.usersModeHint.textContent = inParticipantMode
-    ? `Режим добавления участников для мероприятия #${state.participantsModeEventId}`
+    ? `Предзаполнено мероприятие #${state.participantsModeEventId}. При необходимости можно выбрать другое.`
     : "Список пользователей";
   if (el.usersAddEventSelect) {
-    el.usersAddEventSelect.disabled = inParticipantMode;
-  }
-  if (el.usersAddRoleSelect) {
-    el.usersAddRoleSelect.disabled = false;
+    el.usersAddEventSelect.disabled = false;
   }
 
   renderList(el.usersList, state.usersList, (user) => `
@@ -1844,7 +1839,7 @@ async function onUsersListClick(event) {
     return;
   }
   const roleSelect = document.querySelector(`[data-user-role-select="${userId}"]`);
-  const role = roleSelect ? roleSelect.value : (el.usersAddRoleSelect?.value || "viewer");
+  const role = roleSelect ? roleSelect.value : "viewer";
 
   try {
     await apiRequest(`${API.events}${targetEventId}/participants`, {
@@ -2206,7 +2201,6 @@ async function bootstrap() {
   setAuthView("login");
   syncAuthUi();
   if (state.token) {
-    renderDashboard();
     renderEvents();
     renderTasks();
     renderResources();

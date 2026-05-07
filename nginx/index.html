@@ -18,8 +18,7 @@
       </div>
 
       <nav class="nav">
-        <button class="nav-item active" data-screen="dashboard">Обзор</button>
-        <button class="nav-item" data-screen="events">Мероприятия</button>
+        <button class="nav-item active" data-screen="events">Мероприятия</button>
         <button class="nav-item" data-screen="tasks">Задачи</button>
         <button class="nav-item" data-screen="resources">Ресурсы</button>
         <button class="nav-item" data-screen="users">Пользователи</button>
@@ -36,7 +35,7 @@
     <main class="content">
       <header class="topbar">
         <div class="topbar-head">
-          <h1 id="screen-title">Обзор</h1>
+          <h1 id="screen-title">Мероприятия</h1>
           <div id="topbar-actions" class="topbar-actions hidden"></div>
         </div>
         <p id="status-line" class="status-line">Подключение к API...</p>
@@ -83,7 +82,7 @@
       </section>
 
       <div id="protected-content">
-      <section id="dashboard-screen" class="screen">
+      <section id="events-screen" class="screen">
         <div class="cards-grid">
           <article class="metric-card" data-screen-target="events">
             <p>Мероприятия</p>
@@ -102,9 +101,6 @@
             <strong id="overdue-count">0</strong>
           </article>
         </div>
-      </section>
-
-      <section id="events-screen" class="screen hidden">
         <div id="event-create-panel" class="panel hidden">
           <h2>Новое мероприятие</h2>
           <form id="event-form" class="form-grid">
@@ -226,11 +222,6 @@
           <div id="users-add-controls" class="detail-actions" style="margin-top:10px">
             <select id="users-add-event-select">
               <option value="">Выберите мероприятие для добавления</option>
-            </select>
-            <select id="users-add-role-select">
-              <option value="organizer">Организатор</option>
-              <option value="executor">Исполнитель</option>
-              <option value="viewer">Наблюдатель</option>
             </select>
           </div>
           <p id="users-mode-hint" class="list-item-meta hidden"></p>
