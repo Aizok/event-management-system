@@ -184,9 +184,10 @@ services:
     container_name: auth_service
     ports:
       - "8001:8001"
+    env_file:
+      - ./auth-service/.env
     environment:
       - DATABASE_URL=postgresql://auth_user:auth_password@postgres_auth:5432/auth_db
-      - SECRET_KEY=${SECRET_KEY}
     depends_on:
       postgres_auth:
         condition: service_healthy
@@ -212,9 +213,10 @@ services:
     container_name: event_service
     ports:
       - "8002:8002"
+    env_file:
+      - ./event-service/.env
     environment:
       - DATABASE_URL=postgresql://event_user:event_password@postgres_events:5432/events_db
-      - SECRET_KEY=${SECRET_KEY}
     depends_on:
       postgres_events:
         condition: service_healthy
@@ -240,9 +242,10 @@ services:
     container_name: user_service
     ports:
       - "8003:8003"
+    env_file:
+      - ./user-service/.env
     environment:
       - DATABASE_URL=postgresql://user_user:user_password@postgres_users:5432/users_db
-      - SECRET_KEY=${SECRET_KEY}
     depends_on:
       postgres_users:
         condition: service_healthy
@@ -270,9 +273,10 @@ services:
     container_name: task_service
     ports:
       - "8004:8004"
+    env_file:
+      - ./task-service/.env
     environment:
       - DATABASE_URL=postgresql://task_user:task_password@postgres_tasks:5432/tasks_db
-      - SECRET_KEY=${SECRET_KEY}
     depends_on:
       postgres_tasks:
         condition: service_healthy
@@ -300,9 +304,10 @@ services:
     container_name: resource_service
     ports:
       - "8005:8005"
+    env_file:
+      - ./resource-service/.env
     environment:
       - DATABASE_URL=postgresql://resource_user:resource_password@postgres_resources:5432/resources_db
-      - SECRET_KEY=${SECRET_KEY}
     depends_on:
       postgres_resources:
         condition: service_healthy
@@ -328,9 +333,10 @@ services:
     container_name: notification_service
     ports:
       - "8006:8006"
+    env_file:
+      - ./notification-service/.env
     environment:
       - DATABASE_URL=postgresql://notif_user:notif_password@postgres_notifications:5432/notif_db
-      - SECRET_KEY=${SECRET_KEY}
     depends_on:
       postgres_notifications:
         condition: service_healthy
@@ -358,12 +364,17 @@ services:
     container_name: ai_assistant
     ports:
       - "8007:8007"
+    env_file:
+      - ./ai-assistant/.env
     environment:
       - DATABASE_URL=postgresql://ai_user:ai_password@postgres_ai:5432/ai_db
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
     depends_on:
       postgres_ai:
         condition: service_healthy
+      auth-service:
+        condition: service_started
+      user-service:
+        condition: service_started
     volumes:
       - ./shared:/app/shared:ro
       - ./ai-assistant:/app
@@ -398,6 +409,7 @@ services:
       - task-service
       - resource-service
       - notification-service
+      - ai-assistant
     restart: unless-stopped
     networks:
       - app-network

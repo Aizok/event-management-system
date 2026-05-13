@@ -15,6 +15,7 @@ const state = {
   participantsModeEventId: null,
   allocationPreset: { eventId: null, taskId: null, resourceId: null },
   events: [],
+  aiDraft: null,
   taskMetrics: { total: 0, overdue: 0 },
   tasksPage: [],
   tasksTotal: 0,
@@ -184,6 +185,7 @@ function clearSession() {
   state.tasksLimit = 25;
   state.tasksFilters = { eventId: "", status: "", priority: "", q: "" };
   state.assigneeNames = {};
+  state.aiDraft = null;
 }
 
 function getRoleFromToken(token) {
@@ -331,6 +333,10 @@ function setScreen(screenId) {
     populateTasksFilterEventSelect();
     syncTasksFilterFormFromState();
     void loadTasksPage();
+  }
+  if (screenId === "ai") {
+    if (state.aiDraft) renderAiDraft();
+    else clearAiDraft();
   }
 }
 
@@ -2185,6 +2191,144 @@ async function onResourceCreate(event) {
   }
 }
 
+function clearAiDraft() {
+  state.aiDraft = null;
+  if (el.aiResult) {
+    el.aiResult.innerHTML =
+      '<p class="list-item-meta">Сгенерируйте план по форме выше. Черновик задач появится здесь до сохранения в базу.</p>';
+  }
+}
+
+function renderAiDraft() {
+  if (!el.aiResult || !state.aiDraft) return;
+  const { event_id: eventId, event_title: eventTitle, event_name: eventName, tasks } = state.aiDraft;
+  const rows = tasks
+    .map((t, i) => {
+      const st = toDatetimeLocalValue(t.start_time);
+      const en = toDatetimeLocalValue(t.end_time);
+      const dl = toDatetimeLocalValue(t.deadline);
+      const pr = t.priority || "medium";
+      return `
+    <article class="list-item ai-draft-task" data-index="${i}">
+      <label class="ai-draft-include-label"><input type="checkbox" class="ai-draft-include" checked /> Включить при сохранении</label>
+      <label>Название<input type="text" class="ai-draft-title" value="${escapeHtml(t.title)}" maxlength="255" /></label>
+      <label>Описание<textarea class="ai-draft-desc" rows="2">${escapeHtml(t.description || "")}</textarea></label>
+      <label>Старт (план)<input type="datetime-local" class="ai-draft-start" value="${st}" /></label>
+      <label>Окончание (план)<input type="datetime-local" class="ai-draft-end" value="${en}" /></label>
+      <label>Дедлайн<input type="datetime-local" class="ai-draft-deadline" value="${dl}" /></label>
+      <label>Приоритет
+        <select class="ai-draft-priority">
+          <option value="low" ${pr === "low" ? "selected" : ""}>${enumLabel("taskPriority", "low")}</option>
+          <option value="medium" ${pr === "medium" ? "selected" : ""}>${enumLabel("taskPriority", "medium")}</option>
+          <option value="high" ${pr === "high" ? "selected" : ""}>${enumLabel("taskPriority", "high")}</option>
+        </select>
+      </label>
+    </article>`;
+    })
+    .join("");
+
+  el.aiResult.innerHTML = `
+    <div class="panel ai-draft-panel">
+      <h3>Черновик: ${escapeHtml(eventName)}</h3>
+      <p class="list-item-meta">Мероприятие: ${escapeHtml(eventTitle)}</p>
+      <div class="detail-actions" style="margin:12px 0;flex-wrap:wrap;gap:8px">
+        <button type="button" class="btn btn-primary" id="ai-draft-commit-btn">Добавить выбранные в БД</button>
+        <button type="button" class="btn btn-muted" id="ai-draft-cancel-btn">Отменить черновик</button>
+      </div>
+      <div class="ai-draft-tasks">${rows}</div>
+    </div>
+  `;
+
+  document.getElementById("ai-draft-commit-btn")?.addEventListener("click", () => void onAiDraftCommit());
+  document.getElementById("ai-draft-cancel-btn")?.addEventListener("click", () => clearAiDraft());
+}
+
+function gatherAiDraftTasksPayload() {
+  if (!state.aiDraft) return [];
+  const eventId = state.aiDraft.event_id;
+  const out = [];
+  document.querySelectorAll(".ai-draft-task").forEach((article) => {
+    const inc = article.querySelector(".ai-draft-include");
+    if (!inc?.checked) return;
+    const title = article.querySelector(".ai-draft-title")?.value?.trim() || "";
+    if (!title) return;
+    const desc = article.querySelector(".ai-draft-desc")?.value?.trim() || "";
+    const start = toIsoOrNull(article.querySelector(".ai-draft-start")?.value);
+    const end = toIsoOrNull(article.querySelector(".ai-draft-end")?.value);
+    const deadline = toIsoOrNull(article.querySelector(".ai-draft-deadline")?.value);
+    const priority = article.querySelector(".ai-draft-priority")?.value || "medium";
+    if (!start || !end || !deadline) return;
+    out.push({
+      title,
+      description: desc || null,
+      event_id: eventId,
+      start_time: start,
+      end_time: end,
+      deadline,
+      priority,
+      assignee_id: null
+    });
+  });
+  return out;
+}
+
+function renderAiCommitResult(res) {
+  if (!el.aiResult) return;
+  const created = res.tasks || [];
+  const errors = res.errors || [];
+  const links = created
+    .map(
+      (t) =>
+        `<p class="list-item-meta"><button type="button" class="entity-link" data-entity-link="task" data-id="${t.id}">${escapeHtml(t.title)}</button></p>`
+    )
+    .join("");
+  const errHtml =
+    errors.length > 0
+      ? `<p class="list-item-meta" style="color:var(--danger)">Ошибки: ${escapeHtml(errors.join("; "))}</p>`
+      : "";
+  el.aiResult.innerHTML = `
+    <div class="panel">
+      <h3>Создано задач: ${created.length}</h3>
+      ${links || '<p class="list-item-meta">Ни одна задача не была создана.</p>'}
+      ${errHtml}
+      <p class="list-item-meta" style="margin-top:12px"><button type="button" class="btn btn-muted" id="ai-draft-dismiss-result">Очистить результат</button></p>
+    </div>
+  `;
+  document.getElementById("ai-draft-dismiss-result")?.addEventListener("click", () => clearAiDraft());
+}
+
+async function onAiDraftCommit() {
+  if (!state.aiDraft) return;
+  const tasks = gatherAiDraftTasksPayload();
+  if (!tasks.length) {
+    notify("Отметьте и заполните хотя бы одну задачу (название и все даты обязательны).", true);
+    return;
+  }
+  const btn = document.getElementById("ai-draft-commit-btn");
+  const prev = btn?.textContent;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Сохранение…";
+  }
+  try {
+    const res = await apiRequest(`${API.ai}/commit`, {
+      method: "POST",
+      body: JSON.stringify({ event_id: state.aiDraft.event_id, tasks })
+    });
+    state.aiDraft = null;
+    notify(`Создано задач: ${(res.tasks || []).length}${(res.errors || []).length ? " (есть ошибки)" : ""}`);
+    renderAiCommitResult(res);
+    await refreshData();
+  } catch (error) {
+    notify(`Ошибка сохранения: ${error.message}`, true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prev || "Добавить выбранные в БД";
+    }
+  }
+}
+
 async function onAiGenerate(event) {
   event.preventDefault();
   const form = event.target;
@@ -2207,17 +2351,15 @@ async function onAiGenerate(event) {
       method: "POST",
       body: JSON.stringify(payload)
     });
-    renderList(el.aiResult, result.tasks || [], (task) => `
-      <p class="list-item-title">
-        <button type="button" class="entity-link" data-entity-link="task" data-id="${task.id}">
-          #${task.id} ${escapeHtml(task.title)}
-        </button>
-      </p>
-      <p class="list-item-meta">${escapeHtml(task.description || "Описание не указано")}</p>
-      <p class="list-item-meta">Мероприятие: #${task.event_id}</p>
-    `);
-    notify(`AI сгенерировал задач: ${(result.tasks || []).length}`);
-    await refreshData();
+    const tasks = result.tasks || [];
+    state.aiDraft = {
+      event_id: payload.event_id,
+      event_title: getEventTitle(payload.event_id),
+      event_name: result.event_name || "План",
+      tasks
+    };
+    renderAiDraft();
+    notify(`Сгенерировано задач в черновике: ${tasks.length}. Проверьте и сохраните в базу.`);
   } catch (error) {
     setFormError(form, `Ошибка AI генерации: ${error.message}`);
     notify(`Ошибка AI генерации: ${error.message}`, true);

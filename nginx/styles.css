@@ -480,6 +480,17 @@ textarea {
   white-space: nowrap;
 }
 
+.ai-draft-panel .ai-draft-task {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.ai-draft-include-label {
+  font-size: 13px;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;

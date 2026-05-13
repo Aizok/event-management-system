@@ -5,7 +5,16 @@ from datetime import datetime, timedelta, timezone
 
 from ..core.openai_client import generate_completion
 from .prompt_builder import build_event_prompt
-from ..schemas.ai import TaskItem, CreatedTask, TaskTiming, TaskPriority
+from ..schemas.ai import (
+    TaskItem,
+    CreatedTask,
+    TaskTiming,
+    TaskPriority,
+    ProposedTask,
+    GenerateResponse,
+    CommitGeneratedTasksRequest,
+    CommitGeneratedTasksResponse,
+)
 from ..core.task_client import create_task
 from ..core.event_client import get_event
 from ..core.auth_client import get_service_token
@@ -145,11 +154,13 @@ async def create_task_limited(task_payload: dict, token: str, owner_id: int):
         return await create_task(task_payload, token, owner_id)
 
 
-async def generate_event_plan(description: str, event_id: int, user_id: int):
+async def build_event_plan_drafts(description: str, event_id: int) -> tuple[str, list[dict]]:
     description = description[:MAX_DESCRIPTION]
     prompt = build_event_prompt(description)
 
     raw_response = await generate_completion(prompt)
+    if not isinstance(raw_response, str) or not raw_response.strip():
+        raise ValueError("Пустой ответ модели, повторите запрос")
     raw_response = raw_response[:MAX_AI_RESPONSE]
 
     try:
@@ -163,7 +174,7 @@ async def generate_event_plan(description: str, event_id: int, user_id: int):
     raw_tasks = data.get("tasks", [])
     if not isinstance(raw_tasks, list):
         raise ValueError("AI returned invalid tasks format")
-    raw_tasks = raw_tasks[:MAX_TASKS*2]
+    raw_tasks = raw_tasks[: MAX_TASKS * 2]
 
     validated_tasks: list[TaskItem] = []
 
@@ -176,51 +187,58 @@ async def generate_event_plan(description: str, event_id: int, user_id: int):
     if not validated_tasks:
         raise ValueError("AI returned no valid tasks")
 
-    original_count=len(validated_tasks)
+    original_count = len(validated_tasks)
 
     if original_count > MAX_TASKS:
         logger.warning(f"AI returned too many tasks, truncated to {MAX_TASKS}")
 
     validated_tasks = validated_tasks[:MAX_TASKS]
 
-    event=await get_event(event_id)
-    event_start=datetime.fromisoformat(event["start_time"].replace("Z", "+00:00"))
-    event_end=datetime.fromisoformat(event["end_time"].replace("Z", "+00:00"))
+    event = await get_event(event_id)
+    event_start = datetime.fromisoformat(event["start_time"].replace("Z", "+00:00"))
+    event_end = datetime.fromisoformat(event["end_time"].replace("Z", "+00:00"))
 
-    payloads=build_task_payload_with_timing(
+    payloads = build_task_payload_with_timing(
         validated_tasks,
         event_start,
         event_end,
-        event_id
+        event_id,
     )
 
+    event_name = data.get("event_name")
+    if not isinstance(event_name, str) or not event_name.strip():
+        event_name = "Сгенерированный план"
+
+    return event_name, payloads
+
+
+async def generate_event_plan(description: str, event_id: int) -> dict:
+    event_name, payloads = await build_event_plan_drafts(description, event_id)
+    tasks = [ProposedTask(**p) for p in payloads]
+    return GenerateResponse(event_name=event_name, tasks=tasks, errors=[]).model_dump(mode="json")
+
+
+async def commit_generated_tasks(request: CommitGeneratedTasksRequest, user_id: int) -> dict:
     token = await get_service_token()
-    tasks_to_create=[
-        create_task_limited(payload, token, user_id)
-        for payload in payloads
+    tasks_to_create = [
+        create_task_limited(task.model_dump(mode="json"), token, user_id)
+        for task in request.tasks
     ]
 
     results = await asyncio.gather(*tasks_to_create, return_exceptions=True)
 
-    created_tasks = []
-    errors = []
+    created_tasks: list[CreatedTask] = []
+    errors: list[str] = []
     for r in results:
         if isinstance(r, Exception):
             logger.exception("Task creation failed")
-            errors.append(f"Task creation failed: {type(r).__name__}")
+            errors.append(f"Не удалось создать задачу: {type(r).__name__}")
             continue
         try:
             created_tasks.append(CreatedTask(**r))
         except ValidationError as e:
             logger.error(f"Invalid task response: {r}, error: {e}")
+            errors.append("Некорректный ответ task-service при создании задачи")
             continue
 
-    event_name = data.get("event_name")
-    if not isinstance(event_name, str) or not event_name.strip():
-        event_name = "Generated Event"
-
-    return {
-        "event_name": event_name,
-        "tasks": created_tasks,
-        "errors": errors
-    }
+    return CommitGeneratedTasksResponse(tasks=created_tasks, errors=errors).model_dump(mode="json")
