@@ -138,8 +138,45 @@ body {
 
 .cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+  width: 100%;
+}
+
+@media (max-width: 960px) {
+  .cards-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+#events-screen .events-list-section {
+  margin-top: 24px;
+}
+
+.tasks-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.tasks-filter-actions {
+  display: flex;
+  align-items: flex-end;
+}
+
+.tasks-pagination .tasks-page-size-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--muted);
 }
 
 .metric-card {
@@ -149,20 +186,27 @@ body {
   background: var(--surface);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
   min-height: 118px;
+  gap: 8px;
 }
 
 .metric-card p {
   margin: 0;
   color: var(--muted);
   min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .metric-card strong {
-  display: inline-block;
-  margin-top: 8px;
+  display: block;
+  margin-top: 0;
   font-size: 28px;
+  line-height: 1.1;
 }
 
 .auth-grid {

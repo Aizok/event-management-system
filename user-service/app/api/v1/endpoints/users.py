@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Union
 
 from ....core.security import get_current_user_id, get_current_admin, get_current_user_data, get_current_service
 from ....core.database import get_db
 from ....core.config import settings
 from ....crud.user import user_crud
-from ....schemas.user import UserCreate, UserResponse, UserPublicResponse, UserPublicWithRoleResponse, UserUpdate, TokenData
+from ....schemas.user import UserCreate, UserResponse, UserPublicResponse, UserPublicWithRoleResponse, UserUpdate, TokenData, TokenRole
 from ....core.auth_client import get_user_email_from_auth, get_user_role_from_auth
 
 from fastapi.security import OAuth2PasswordBearer
@@ -248,7 +248,7 @@ async def read_public_profiles(
     return output
 
 
-@router.get("/{user_id}", response_model=UserPublicResponse)
+@router.get("/{user_id}", response_model=Union[UserResponse, UserPublicWithRoleResponse])
 async def read_user_profile(
         user_id: int,
         db: AsyncSession=Depends(get_db),
@@ -261,13 +261,35 @@ async def read_user_profile(
             detail="User profile not found"
         )
 
-    if profile.auth_user_id!=token_data.user_id and token_data.role!="admin":
+    if profile.auth_user_id!=token_data.user_id and token_data.role!=TokenRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
         )
 
-    return profile
+    role = await get_user_role_from_auth(profile.auth_user_id)
+    if token_data.role == TokenRole.ADMIN or profile.auth_user_id == token_data.user_id:
+        return UserResponse(
+            id=profile.id,
+            auth_user_id=profile.auth_user_id,
+            email=profile.email,
+            first_name=profile.first_name,
+            last_name=profile.last_name,
+            phone=profile.phone,
+            speciality=profile.speciality,
+            bio=profile.bio,
+            role=role,
+            created_at=profile.created_at,
+            updated_at=profile.updated_at,
+        )
+
+    return UserPublicWithRoleResponse(
+        id=profile.id,
+        first_name=profile.first_name,
+        last_name=profile.last_name,
+        speciality=profile.speciality,
+        role=role,
+    )
 
 
 @router.put("/{user_id}", response_model=UserResponse)

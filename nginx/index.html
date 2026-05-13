@@ -107,7 +107,7 @@
             <button class="btn" type="submit">Создать мероприятие</button>
           </form>
         </div>
-        <div class="panel">
+        <div class="panel events-list-section">
           <h2>Список мероприятий</h2>
           <div id="events-list" class="list"></div>
         </div>
@@ -141,6 +141,49 @@
             <label>Описание задачи<textarea name="description" placeholder="Описание задачи"></textarea></label>
             <button class="btn" type="submit">Создать задачу</button>
           </form>
+        </div>
+        <div class="panel tasks-toolbar">
+          <form id="tasks-filter-form" class="form-grid tasks-filter-grid">
+            <label>Мероприятие
+              <select id="tasks-filter-event"><option value="">Все мероприятия</option></select>
+            </label>
+            <label>Статус
+              <select id="tasks-filter-status">
+                <option value="">Все</option>
+                <option value="todo">К выполнению</option>
+                <option value="in_progress">В работе</option>
+                <option value="done">Завершено</option>
+                <option value="overdue">Просрочено</option>
+                <option value="blocked">Заблокировано</option>
+              </select>
+            </label>
+            <label>Приоритет
+              <select id="tasks-filter-priority">
+                <option value="">Все</option>
+                <option value="low">Низкий</option>
+                <option value="medium">Средний</option>
+                <option value="high">Высокий</option>
+              </select>
+            </label>
+            <label>Поиск по названию
+              <input type="search" id="tasks-filter-q" placeholder="Часть названия" autocomplete="off">
+            </label>
+            <div class="tasks-filter-actions">
+              <button type="submit" class="btn">Применить</button>
+            </div>
+          </form>
+          <div class="detail-actions tasks-pagination" style="margin-top:12px;flex-wrap:wrap;align-items:center">
+            <span id="tasks-page-info" class="list-item-meta"></span>
+            <button type="button" class="btn btn-muted" id="tasks-page-prev">Назад</button>
+            <button type="button" class="btn btn-muted" id="tasks-page-next">Вперёд</button>
+            <label class="tasks-page-size-label">На странице
+              <select id="tasks-page-size">
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+          </div>
         </div>
         <div class="panel">
           <h2>Список задач</h2>

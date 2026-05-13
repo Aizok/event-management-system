@@ -4,12 +4,20 @@ from typing import List
 from ....core.database import get_db
 from ....core.security import get_current_service, get_current_profile_id, get_current_user_data
 from ....crud.task import task_crud
-from ....schemas.task import TaskCreate, TaskUpdate, TaskResponse, TokenData
+from ....schemas.task import (
+    TaskCreate,
+    TaskUpdate,
+    TaskResponse,
+    TokenData,
+    TaskPage,
+    TaskMetricsResponse,
+    TaskStatus,
+    TaskPriority,
+)
 from ....core.events import publish_task_created, publish_task_updated
 from ....core.permissions import check_task_permissions, ALLOWED_ROLES, check_task_manage_permissions
 from ....core.event_client import get_user_events_with_roles
 from ....core.event_client import get_user_role_in_event
-from ....utils.collections import unique_by_id
 
 ALLOWED_SERVICES={"resource-service", "ai-assistant"}
 
@@ -44,36 +52,70 @@ async def create_task(
     return task
 
 
-@router.get("/", response_model=List[TaskResponse])
+@router.get("/", response_model=TaskPage)
 async def read_tasks(
         skip: int = 0,
-        limit: int = 100,
+        limit: int = 25,
+        event_id: int | None = Query(None),
+        status: TaskStatus | None = Query(None),
+        priority: TaskPriority | None = Query(None),
+        q: str | None = Query(None),
         db: AsyncSession = Depends(get_db),
         user_id: int = Depends(get_current_profile_id),
-        user_data: TokenData = Depends(get_current_user_data)
+        user_data: TokenData = Depends(get_current_user_data),
 ):
-    if user_data.role == "admin":
-        return await task_crud.get_multi(db, skip, limit)
+    limit = min(max(limit, 1), 100)
+    skip = max(skip, 0)
+    is_admin = user_data.role == "admin"
+    allowed_event_ids: list[int] = []
+    if not is_admin:
+        events = await get_user_events_with_roles(user_id)
+        allowed_event_ids = [e["event_id"] for e in events if e["role"] in ALLOWED_ROLES]
 
-    tasks_assigned=await task_crud.get_by_assignee(db, user_id)
-
-    events=await get_user_events_with_roles(user_id)
-    allowed_event_ids = [
-        e["event_id"]
-        for e in events
-        if e["role"] in ALLOWED_ROLES
-    ]
-
-    if not allowed_event_ids:
-        return tasks_assigned
-
-    tasks_by_event = await task_crud.get_by_event_ids(
+    total = await task_crud.count_accessible_tasks(
         db,
-        allowed_event_ids,
-        skip,
-        limit
+        is_admin=is_admin,
+        profile_id=user_id,
+        allowed_event_ids=allowed_event_ids,
+        event_id=event_id,
+        status=status,
+        priority=priority,
+        q=q,
     )
-    return unique_by_id(tasks_by_event+tasks_assigned)
+    items = await task_crud.list_accessible_tasks(
+        db,
+        is_admin=is_admin,
+        profile_id=user_id,
+        allowed_event_ids=allowed_event_ids,
+        skip=skip,
+        limit=limit,
+        event_id=event_id,
+        status=status,
+        priority=priority,
+        q=q,
+    )
+    return TaskPage(items=items, total=total)
+
+
+@router.get("/metrics", response_model=TaskMetricsResponse)
+async def read_tasks_metrics(
+        db: AsyncSession = Depends(get_db),
+        user_id: int = Depends(get_current_profile_id),
+        user_data: TokenData = Depends(get_current_user_data),
+):
+    is_admin = user_data.role == "admin"
+    allowed_event_ids: list[int] = []
+    if not is_admin:
+        events = await get_user_events_with_roles(user_id)
+        allowed_event_ids = [e["event_id"] for e in events if e["role"] in ALLOWED_ROLES]
+
+    total, overdue = await task_crud.metrics_accessible_tasks(
+        db,
+        is_admin=is_admin,
+        profile_id=user_id,
+        allowed_event_ids=allowed_event_ids,
+    )
+    return TaskMetricsResponse(total=total, overdue=overdue)
 
 
 @router.get("/internal/tasks/{task_id}")

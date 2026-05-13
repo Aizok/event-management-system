@@ -1,7 +1,7 @@
 import enum
 
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from ..models.task import TaskStatus, TaskPriority
 
@@ -51,6 +51,23 @@ class TaskResponse(BaseModel):
     is_late_start: bool = False
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TaskBrief(BaseModel):
+    id: int
+    title: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskPage(BaseModel):
+    items: List[TaskResponse]
+    total: int
+
+
+class TaskMetricsResponse(BaseModel):
+    total: int
+    overdue: int
 
 
 class TokenRole(str, enum.Enum):

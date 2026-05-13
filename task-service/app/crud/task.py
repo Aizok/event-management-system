@@ -1,7 +1,7 @@
-from sqlalchemy import select, func, update, delete, desc
+from sqlalchemy import select, func, update, delete, desc, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
-from ..models.task import Task, TaskStatus
+from typing import List, Optional, Tuple
+from ..models.task import Task, TaskStatus, TaskPriority
 from ..models.task_history import TaskHistory
 from ..schemas.task import TaskCreate, TaskUpdate
 from ..crud.task_dependency import task_dependency_crud
@@ -325,5 +325,124 @@ class TaskCRUD:
         )
         result=await db.execute(query)
         return result.scalars().all()
+
+    def _accessible_task_conditions(
+        self,
+        *,
+        is_admin: bool,
+        profile_id: int,
+        allowed_event_ids: List[int],
+        event_id: Optional[int],
+        status: Optional[TaskStatus],
+        priority: Optional[TaskPriority],
+        q: Optional[str],
+    ) -> List:
+        cond: List = []
+        if not is_admin:
+            if allowed_event_ids:
+                cond.append(
+                    or_(Task.event_id.in_(allowed_event_ids), Task.assignee_id == profile_id)
+                )
+            else:
+                cond.append(Task.assignee_id == profile_id)
+        if event_id is not None:
+            cond.append(Task.event_id == event_id)
+        if status is not None:
+            cond.append(Task.status == status)
+        if priority is not None:
+            cond.append(Task.priority == priority)
+        if q and str(q).strip():
+            cond.append(Task.title.ilike(f"%{str(q).strip()}%"))
+        return cond
+
+    async def count_accessible_tasks(
+        self,
+        db: AsyncSession,
+        *,
+        is_admin: bool,
+        profile_id: int,
+        allowed_event_ids: List[int],
+        event_id: Optional[int] = None,
+        status: Optional[TaskStatus] = None,
+        priority: Optional[TaskPriority] = None,
+        q: Optional[str] = None,
+    ) -> int:
+        conditions = self._accessible_task_conditions(
+            is_admin=is_admin,
+            profile_id=profile_id,
+            allowed_event_ids=allowed_event_ids,
+            event_id=event_id,
+            status=status,
+            priority=priority,
+            q=q,
+        )
+        stmt = select(func.count()).select_from(Task)
+        if conditions:
+            stmt = stmt.where(and_(*conditions))
+        result = await db.execute(stmt)
+        return int(result.scalar_one() or 0)
+
+    async def list_accessible_tasks(
+        self,
+        db: AsyncSession,
+        *,
+        is_admin: bool,
+        profile_id: int,
+        allowed_event_ids: List[int],
+        skip: int = 0,
+        limit: int = 25,
+        event_id: Optional[int] = None,
+        status: Optional[TaskStatus] = None,
+        priority: Optional[TaskPriority] = None,
+        q: Optional[str] = None,
+    ) -> List[Task]:
+        conditions = self._accessible_task_conditions(
+            is_admin=is_admin,
+            profile_id=profile_id,
+            allowed_event_ids=allowed_event_ids,
+            event_id=event_id,
+            status=status,
+            priority=priority,
+            q=q,
+        )
+        stmt = (
+            select(Task)
+            .order_by(desc(Task.created_at))
+            .offset(skip)
+            .limit(limit)
+        )
+        if conditions:
+            stmt = stmt.where(and_(*conditions))
+        result = await db.execute(stmt)
+        tasks = result.scalars().all()
+        for task in tasks:
+            task.is_late_start = is_late_start(task)
+        return tasks
+
+    async def metrics_accessible_tasks(
+        self,
+        db: AsyncSession,
+        *,
+        is_admin: bool,
+        profile_id: int,
+        allowed_event_ids: List[int],
+    ) -> Tuple[int, int]:
+        base = self._accessible_task_conditions(
+            is_admin=is_admin,
+            profile_id=profile_id,
+            allowed_event_ids=allowed_event_ids,
+            event_id=None,
+            status=None,
+            priority=None,
+            q=None,
+        )
+        total_stmt = select(func.count()).select_from(Task)
+        overdue_stmt = select(func.count()).select_from(Task).where(Task.status == TaskStatus.OVERDUE)
+        if base:
+            total_stmt = total_stmt.where(and_(*base))
+            overdue_stmt = overdue_stmt.where(and_(*base))
+        total_r = await db.execute(total_stmt)
+        overdue_r = await db.execute(overdue_stmt)
+        return int(total_r.scalar_one() or 0), int(overdue_r.scalar_one() or 0)
 
 task_crud=TaskCRUD()

@@ -15,8 +15,14 @@ const state = {
   participantsModeEventId: null,
   allocationPreset: { eventId: null, taskId: null, resourceId: null },
   events: [],
-  tasks: [],
-  resources: []
+  taskMetrics: { total: 0, overdue: 0 },
+  tasksPage: [],
+  tasksTotal: 0,
+  tasksSkip: 0,
+  tasksLimit: 25,
+  tasksFilters: { eventId: "", status: "", priority: "", q: "" },
+  resources: [],
+  assigneeNames: {}
 };
 
 const API = {
@@ -156,6 +162,13 @@ function clearSession() {
   state.usersSearch = { id: "", q: "", speciality: "" };
   localStorage.removeItem("ems_token");
   localStorage.removeItem("ems_email");
+  state.taskMetrics = { total: 0, overdue: 0 };
+  state.tasksPage = [];
+  state.tasksTotal = 0;
+  state.tasksSkip = 0;
+  state.tasksLimit = 25;
+  state.tasksFilters = { eventId: "", status: "", priority: "", q: "" };
+  state.assigneeNames = {};
 }
 
 function getRoleFromToken(token) {
@@ -299,6 +312,11 @@ function setScreen(screenId) {
   if (screenId === "profile-cabinet") {
     void loadProfileCabinet();
   }
+  if (screenId === "tasks") {
+    populateTasksFilterEventSelect();
+    syncTasksFilterFormFromState();
+    void loadTasksPage();
+  }
 }
 
 function updateTopbarActions() {
@@ -375,7 +393,7 @@ function updateTopbarActions() {
         panel.classList.toggle("hidden");
         if (!panel.classList.contains("hidden")) {
           populateAllocationEventOptions(state.allocationPreset.eventId);
-          populateAllocationTaskOptions(state.allocationPreset.eventId, state.allocationPreset.taskId);
+          void populateAllocationTaskOptions(state.allocationPreset.eventId, state.allocationPreset.taskId);
           populateAllocationResourceOptions(state.allocationPreset.eventId, state.allocationPreset.resourceId);
         }
       }
@@ -401,10 +419,98 @@ function renderList(listNode, items, formatter) {
 
 function renderDashboard() {
   el.eventsCount.textContent = String(state.events.length);
-  el.tasksCount.textContent = String(state.tasks.length);
+  el.tasksCount.textContent = String(state.taskMetrics.total ?? 0);
   el.resourcesCount.textContent = String(state.resources.length);
-  const overdue = state.tasks.filter((task) => task.status === "overdue").length;
-  el.overdueCount.textContent = String(overdue);
+  el.overdueCount.textContent = String(state.taskMetrics.overdue ?? 0);
+}
+
+function populateTasksFilterEventSelect() {
+  const sel = document.getElementById("tasks-filter-event");
+  if (!sel) return;
+  const cur = state.tasksFilters.eventId || "";
+  const opts = ['<option value="">Все мероприятия</option>'];
+  state.events.forEach((event) => {
+    const s = String(cur) === String(event.id) ? "selected" : "";
+    opts.push(`<option value="${event.id}" ${s}>${escapeHtml(formatEventLabel(event))}</option>`);
+  });
+  sel.innerHTML = opts.join("");
+}
+
+function syncTasksFilterFormFromState() {
+  const ev = document.getElementById("tasks-filter-event");
+  if (ev) ev.value = state.tasksFilters.eventId || "";
+  const st = document.getElementById("tasks-filter-status");
+  if (st) st.value = state.tasksFilters.status || "";
+  const pr = document.getElementById("tasks-filter-priority");
+  if (pr) pr.value = state.tasksFilters.priority || "";
+  const qn = document.getElementById("tasks-filter-q");
+  if (qn) qn.value = state.tasksFilters.q || "";
+  const ps = document.getElementById("tasks-page-size");
+  if (ps) ps.value = String(state.tasksLimit);
+}
+
+function buildTasksListQueryString() {
+  const p = new URLSearchParams();
+  p.set("skip", String(state.tasksSkip));
+  p.set("limit", String(state.tasksLimit));
+  const f = state.tasksFilters;
+  if (f.eventId) p.set("event_id", String(f.eventId));
+  if (f.status) p.set("status", String(f.status));
+  if (f.priority) p.set("priority", String(f.priority));
+  if (f.q && String(f.q).trim()) p.set("q", String(f.q).trim());
+  return p.toString();
+}
+
+function updateTasksPageControls() {
+  const info = document.getElementById("tasks-page-info");
+  if (info) {
+    const pages = Math.max(1, Math.ceil((state.tasksTotal || 0) / (state.tasksLimit || 1)) || 1);
+    const page = Math.min(pages, Math.floor(state.tasksSkip / (state.tasksLimit || 1)) + 1);
+    info.textContent = `Страница ${page} из ${pages} (всего задач: ${state.tasksTotal})`;
+  }
+  const prev = document.getElementById("tasks-page-prev");
+  const next = document.getElementById("tasks-page-next");
+  if (prev) prev.disabled = state.tasksSkip <= 0;
+  if (next) next.disabled = state.tasksSkip + state.tasksLimit >= state.tasksTotal;
+}
+
+async function loadTasksPage(options = {}) {
+  const { resetPage = false } = options;
+  if (!state.token || !state.profileId) return;
+  if (resetPage) state.tasksSkip = 0;
+  notify("Загрузка задач…");
+  try {
+    const qs = buildTasksListQueryString();
+    const data = await apiRequest(`${API.tasks}?${qs}`);
+    const items = Array.isArray(data?.items) ? data.items : [];
+    const total = typeof data?.total === "number" ? data.total : items.length;
+    state.tasksPage = items;
+    state.tasksTotal = total;
+    state.assigneeNames = {};
+    const assigneeIds = [...new Set(items.map((t) => t.assignee_id).filter((id) => id != null && id !== ""))];
+    if (assigneeIds.length) {
+      const params = new URLSearchParams();
+      assigneeIds.forEach((id) => params.append("ids", String(id)));
+      try {
+        const profiles = await apiRequest(`${API.users}/public/by-ids?${params.toString()}`);
+        (Array.isArray(profiles) ? profiles : []).forEach((p) => {
+          const label = `${p.first_name || ""} ${p.last_name || ""}`.trim();
+          if (label) state.assigneeNames[p.id] = label;
+        });
+      } catch {
+        /* подписи исполнителей необязательны */
+      }
+    }
+    renderTasks();
+    updateTasksPageControls();
+    notify("Готово");
+  } catch (error) {
+    state.tasksPage = [];
+    state.tasksTotal = 0;
+    renderTasks();
+    updateTasksPageControls();
+    notify(error.message, true);
+  }
 }
 
 function populateResourceEventOptions(selectedEventId = null) {
@@ -442,7 +548,7 @@ function renderEvents() {
   renderList(el.eventsList, state.events, (event) => `
     <p class="list-item-title">
       <button type="button" class="entity-link" data-entity-link="event" data-id="${event.id}">
-        #${event.id} ${escapeHtml(event.title)}
+        ${escapeHtml(event.title)}
       </button>
       <span class="badge">${enumLabel("eventStatus", event.status)}</span>
     </p>
@@ -452,29 +558,40 @@ function renderEvents() {
 }
 
 function renderTasks() {
-  renderList(el.tasksList, state.tasks, (task) => `
+  renderList(el.tasksList, state.tasksPage, (task) => {
+    const eventTitle = escapeHtml(getEventTitle(task.event_id));
+    const assigneeLabel =
+      task.assignee_id == null
+        ? "не назначен"
+        : escapeHtml(state.assigneeNames[task.assignee_id] || "Исполнитель");
+    return `
     <p class="list-item-title">
       <button type="button" class="entity-link" data-entity-link="task" data-id="${task.id}">
-        #${task.id} ${escapeHtml(task.title)}
+        ${escapeHtml(task.title)}
       </button>
       <span class="badge">${enumLabel("taskStatus", task.status)}</span>
       <span class="badge">${enumLabel("taskPriority", task.priority)}</span>
       ${task.status === "overdue" ? '<span class="badge badge-danger">Просрочено</span>' : ""}
     </p>
-    <p class="list-item-meta">Мероприятие: #${task.event_id} | Исполнитель: ${task.assignee_id ?? "не назначен"}</p>
+    <p class="list-item-meta">Мероприятие: ${eventTitle} | Исполнитель: ${assigneeLabel}</p>
     <p class="list-item-meta">Дедлайн: ${new Date(task.deadline).toLocaleString()}</p>
-  `);
+  `;
+  });
 }
 
 function renderResources() {
+  const eventBtn = (resource) => {
+    const title = escapeHtml(getEventTitle(resource.event_id));
+    return `<button type="button" class="entity-link" data-entity-link="event" data-id="${resource.event_id}">${title}</button>`;
+  };
   renderList(el.resourcesList, state.resources, (resource) => `
     <p class="list-item-title">
       <button type="button" class="entity-link" data-entity-link="resource" data-id="${resource.id}">
-        #${resource.id} ${escapeHtml(resource.name)}
+        ${escapeHtml(resource.name)}
       </button>
       <span class="badge">${enumLabel("resourceType", resource.type)}</span>
     </p>
-    <p class="list-item-meta">Мероприятие: #${resource.event_id} | Кол-во: ${resource.quantity}</p>
+    <p class="list-item-meta">Мероприятие: ${eventBtn(resource)} | Кол-во: ${resource.quantity}</p>
     <p class="list-item-meta">Стоимость/час: ${resource.cost_per_hour ?? "не указано"}</p>
   `);
 }
@@ -495,7 +612,7 @@ function renderUsers() {
   renderList(el.usersList, state.usersList, (user) => `
     <p class="list-item-title">
       <button type="button" class="entity-link" data-entity-link="user" data-id="${user.id}">
-        #${user.id} ${escapeHtml(user.first_name)} ${escapeHtml(user.last_name)}
+        ${escapeHtml(user.first_name)} ${escapeHtml(user.last_name)}
       </button>
     </p>
     <p class="list-item-meta">Роль: ${enumLabel("participantRole", user.role || "viewer")}</p>
@@ -516,10 +633,6 @@ function renderUsers() {
   `);
 }
 
-function getTasksByEventId(eventId) {
-  return state.tasks.filter((task) => task.event_id === Number(eventId));
-}
-
 function getResourcesByEventId(eventId) {
   return state.resources.filter((resource) => resource.event_id === Number(eventId));
 }
@@ -534,15 +647,23 @@ function populateAllocationEventOptions(selectedEventId = null) {
   el.allocationEventSelect.innerHTML = options.join("");
 }
 
-function populateAllocationTaskOptions(eventId, selectedTaskId = null) {
+async function populateAllocationTaskOptions(eventId, selectedTaskId = null) {
   if (!el.allocationTaskSelect) return;
-  const tasks = eventId ? getTasksByEventId(eventId) : [];
-  const options = ['<option value="">Без задачи</option>'];
-  tasks.forEach((task) => {
-    const selected = selectedTaskId != null && Number(selectedTaskId) === task.id ? "selected" : "";
-    options.push(`<option value="${task.id}" ${selected}>#${task.id} ${escapeHtml(task.title)}</option>`);
-  });
-  el.allocationTaskSelect.innerHTML = options.join("");
+  el.allocationTaskSelect.innerHTML = '<option value="">Без задачи</option>';
+  if (!eventId) return;
+  try {
+    const tasks = await apiRequest(`${API.tasks}event/${eventId}`);
+    (Array.isArray(tasks) ? tasks : []).forEach((task) => {
+      const selected = selectedTaskId != null && Number(selectedTaskId) === task.id ? "selected" : "";
+      const opt = document.createElement("option");
+      opt.value = String(task.id);
+      opt.textContent = task.title;
+      if (selected) opt.selected = true;
+      el.allocationTaskSelect.appendChild(opt);
+    });
+  } catch {
+    /* ignore */
+  }
 }
 
 function populateAllocationResourceOptions(eventId, selectedResourceId = null) {
@@ -558,6 +679,14 @@ function populateAllocationResourceOptions(eventId, selectedResourceId = null) {
 
 function formatEventLabel(event) {
   return `${event.title} | ${new Date(event.start_time).toLocaleString()} - ${new Date(event.end_time).toLocaleString()}`;
+}
+
+function getEventTitle(eventId) {
+  if (eventId == null || eventId === "") return "Мероприятие";
+  const id = Number(eventId);
+  const ev = state.events.find((e) => e.id === id);
+  if (ev && ev.title) return String(ev.title);
+  return "Мероприятие";
 }
 
 function populateTaskEventOptions(selectedEventId = null) {
@@ -656,7 +785,7 @@ async function openUsersForEventParticipants(eventId) {
   await loadUsers();
 }
 
-function openAllocationCreatePanel(preset = {}) {
+async function openAllocationCreatePanel(preset = {}) {
   state.allocationPreset = {
     eventId: preset.eventId ?? null,
     taskId: preset.taskId ?? null,
@@ -669,14 +798,18 @@ function openAllocationCreatePanel(preset = {}) {
     panel.classList.remove("hidden");
   }
   populateAllocationEventOptions(state.allocationPreset.eventId);
-  populateAllocationTaskOptions(state.allocationPreset.eventId, state.allocationPreset.taskId);
+  await populateAllocationTaskOptions(state.allocationPreset.eventId, state.allocationPreset.taskId);
   populateAllocationResourceOptions(state.allocationPreset.eventId, state.allocationPreset.resourceId);
   const allocForm = document.getElementById("allocation-form");
   if (allocForm && state.allocationPreset.taskId) {
-    const task = state.tasks.find((item) => item.id === Number(state.allocationPreset.taskId));
-    if (task) {
-      allocForm.elements.date_start.value = toDatetimeLocalValue(task.start_time);
-      allocForm.elements.date_end.value = toDatetimeLocalValue(task.end_time);
+    try {
+      const task = await apiRequest(`${API.tasks}${state.allocationPreset.taskId}`);
+      if (task) {
+        allocForm.elements.date_start.value = toDatetimeLocalValue(task.start_time);
+        allocForm.elements.date_end.value = toDatetimeLocalValue(task.end_time);
+      }
+    } catch {
+      /* ignore */
     }
   }
 }
@@ -751,9 +884,9 @@ async function refreshData() {
     }
   }
   notify("Загрузка данных...");
-  const [eventsResult, tasksResult, resourcesResult] = await Promise.allSettled([
+  const [eventsResult, metricsResult, resourcesResult] = await Promise.allSettled([
     apiRequest(API.events),
-    apiRequest(API.tasks),
+    apiRequest(`${API.tasks}metrics`),
     apiRequest(API.resources)
   ]);
 
@@ -766,11 +899,15 @@ async function refreshData() {
     errors.push(`мероприятия: ${eventsResult.reason?.message || "неизвестная ошибка"}`);
   }
 
-  if (tasksResult.status === "fulfilled") {
-    state.tasks = Array.isArray(tasksResult.value) ? tasksResult.value : [];
+  if (metricsResult.status === "fulfilled") {
+    const m = metricsResult.value;
+    state.taskMetrics = {
+      total: typeof m?.total === "number" ? m.total : 0,
+      overdue: typeof m?.overdue === "number" ? m.overdue : 0
+    };
   } else {
-    state.tasks = [];
-    errors.push(`задачи: ${tasksResult.reason?.message || "неизвестная ошибка"}`);
+    state.taskMetrics = { total: 0, overdue: 0 };
+    errors.push(`задачи (метрики): ${metricsResult.reason?.message || "неизвестная ошибка"}`);
   }
 
   if (resourcesResult.status === "fulfilled") {
@@ -789,10 +926,16 @@ async function refreshData() {
   populateResourceEventOptions();
   populateAiEventOptions();
   populateAllocationEventOptions(state.allocationPreset.eventId);
-  populateAllocationTaskOptions(state.allocationPreset.eventId, state.allocationPreset.taskId);
+  void populateAllocationTaskOptions(state.allocationPreset.eventId, state.allocationPreset.taskId);
   populateAllocationResourceOptions(state.allocationPreset.eventId, state.allocationPreset.resourceId);
   if (state.taskCreatePresetEventId != null) {
     await loadAssigneeOptions(state.taskCreatePresetEventId);
+  }
+
+  if (state.currentScreen === "tasks") {
+    populateTasksFilterEventSelect();
+    syncTasksFilterFormFromState();
+    await loadTasksPage();
   }
 
   if (errors.length) {
@@ -1150,7 +1293,7 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
       void openUsersForEventParticipants(event.id);
     });
     document.getElementById("event-open-allocation-btn").addEventListener("click", () => {
-      openAllocationCreatePanel({ eventId: event.id });
+      void openAllocationCreatePanel({ eventId: event.id });
     });
     document.getElementById("event-toggle-edit-btn").addEventListener("click", () => {
       document.getElementById("event-edit-section").classList.remove("hidden");
@@ -1231,6 +1374,13 @@ async function openTaskDetail(taskId, opts = {}) {
     const task = await apiRequest(`${API.tasks}${taskId}`);
     el.screenTitle.textContent = task.title || `Задача #${taskId}`;
     let dependsOn = [];
+    let eventTasksForDeps = [];
+    try {
+      eventTasksForDeps = await apiRequest(`${API.tasks}event/${task.event_id}`);
+      if (!Array.isArray(eventTasksForDeps)) eventTasksForDeps = [];
+    } catch {
+      eventTasksForDeps = [];
+    }
     const mode = taskDetailMode(task);
     if (mode === "full" && canCreate()) {
       try {
@@ -1240,7 +1390,7 @@ async function openTaskDetail(taskId, opts = {}) {
         notify(`Не удалось загрузить зависимости: ${depErr.message}`, true);
       }
     }
-    renderTaskDetailCard(task, dependsOn);
+    renderTaskDetailCard(task, dependsOn, eventTasksForDeps);
     notify("Готово");
   } catch (error) {
     notify(error.message, true);
@@ -1248,8 +1398,8 @@ async function openTaskDetail(taskId, opts = {}) {
   }
 }
 
-function buildTaskDependenciesPanel(task, dependsOnIds) {
-  const inEvent = state.tasks.filter((t) => t.event_id === task.event_id);
+function buildTaskDependenciesPanel(task, dependsOnIds, eventTasksList = []) {
+  const inEvent = Array.isArray(eventTasksList) ? eventTasksList : [];
   const taskById = Object.fromEntries(inEvent.map((t) => [t.id, t]));
   const listBlock =
     dependsOnIds.length === 0
@@ -1283,11 +1433,11 @@ function buildTaskDependenciesPanel(task, dependsOnIds) {
     </div>`;
 }
 
-function renderTaskDetailCard(task, dependsOnIds = []) {
+function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = []) {
   const root = document.getElementById("task-detail-root");
   const mode = taskDetailMode(task);
   const canManage = canCreate();
-  const depsSection = mode === "full" && canManage ? buildTaskDependenciesPanel(task, dependsOnIds) : "";
+  const depsSection = mode === "full" && canManage ? buildTaskDependenciesPanel(task, dependsOnIds, eventTasksForDeps) : "";
 
   const statusSelect = (name, current, options = ["todo", "in_progress", "done", "overdue", "blocked"]) => `
     <select name="${name}">
@@ -1381,7 +1531,7 @@ function renderTaskDetailCard(task, dependsOnIds = []) {
     }
     void loadTaskEditAssigneeOptions(task.event_id, task.assignee_id);
     document.getElementById("task-open-allocation-btn").addEventListener("click", () => {
-      openAllocationCreatePanel({ eventId: task.event_id, taskId: task.id });
+      void openAllocationCreatePanel({ eventId: task.event_id, taskId: task.id });
     });
     document.getElementById("task-toggle-edit-btn").addEventListener("click", () => {
       document.getElementById("task-edit-section").classList.remove("hidden");
@@ -1464,10 +1614,6 @@ async function onTaskDependencyAdd(taskId) {
     await apiRequest(`${API.tasks}${taskId}/dependencies/${dependsOn}`, { method: "POST" });
     notify("Зависимость добавлена");
     await openTaskDetail(taskId, taskDetailReopenOpts());
-    if (state.detailBackTarget?.kind === "event") {
-      const eventTasks = await apiRequest(`${API.tasks}event/${state.detailBackTarget.id}`);
-      if (Array.isArray(eventTasks)) state.tasks = eventTasks;
-    }
   } catch (error) {
     notify(`Не удалось добавить зависимость: ${error.message}`, true);
   }
@@ -1479,10 +1625,6 @@ async function onTaskDependencyRemove(taskId, dependsOnTaskId) {
     await apiRequest(`${API.tasks}${taskId}/dependencies/${dependsOnTaskId}`, { method: "DELETE" });
     notify("Зависимость удалена");
     await openTaskDetail(taskId, taskDetailReopenOpts());
-    if (state.detailBackTarget?.kind === "event") {
-      const eventTasks = await apiRequest(`${API.tasks}event/${state.detailBackTarget.id}`);
-      if (Array.isArray(eventTasks)) state.tasks = eventTasks;
-    }
   } catch (error) {
     notify(`Не удалось удалить зависимость: ${error.message}`, true);
   }
@@ -1520,7 +1662,27 @@ async function openResourceDetail(resourceId) {
   try {
     const resource = await apiRequest(`${API.resources}${resourceId}`);
     el.screenTitle.textContent = resource.name || `Ресурс #${resourceId}`;
-    renderResourceDetailCard(resource);
+
+    const [event, ownerRaw, eventTasks] = await Promise.all([
+      apiRequest(`${API.events}${resource.event_id}`).catch(() => null),
+      state.role === "admin"
+        ? apiRequest(`${API.users}/${resource.owner_id}`).catch(() => null)
+        : apiRequest(`${API.users}/public/by-ids?ids=${resource.owner_id}`).catch(() => null),
+      apiRequest(`${API.tasks}event/${resource.event_id}`).catch(() => [])
+    ]);
+
+    const eventTitle = event?.title?.trim() ? event.title : "Мероприятие";
+    const owner = Array.isArray(ownerRaw) ? ownerRaw[0] : ownerRaw;
+    const ownerName = owner
+      ? `${owner.first_name || ""} ${owner.last_name || ""}`.trim() || "Пользователь"
+      : "Не удалось загрузить";
+
+    const taskById = {};
+    for (const t of Array.isArray(eventTasks) ? eventTasks : []) {
+      taskById[t.id] = (t.title && String(t.title).trim()) || "";
+    }
+
+    renderResourceDetailCard(resource, { eventTitle, ownerName, taskById });
     notify("Готово");
   } catch (error) {
     notify(error.message, true);
@@ -1542,12 +1704,16 @@ async function openUserDetail(userId) {
     let user;
     if (state.role === "admin") {
       user = await apiRequest(`${API.users}/${userId}`);
+    } else if (state.profileId != null && Number(userId) === Number(state.profileId)) {
+      user = await apiRequest(`${API.users}/${userId}`);
     } else {
       const list = await apiRequest(`${API.users}/public/by-ids?ids=${userId}`);
       user = Array.isArray(list) ? list[0] : null;
     }
     if (!user) throw new Error("Пользователь не найден");
     el.screenTitle.textContent = `${user.first_name || ""} ${user.last_name || ""}`.trim() || `Пользователь #${userId}`;
+    const showContacts =
+      state.role === "admin" || (state.profileId != null && Number(userId) === Number(state.profileId));
     root.innerHTML = `
       <div class="panel">
         <dl class="detail-dl">
@@ -1556,7 +1722,11 @@ async function openUserDetail(userId) {
           <dt>Фамилия</dt><dd>${escapeHtml(user.last_name || "—")}</dd>
           <dt>Специализация</dt><dd>${escapeHtml(user.speciality || "—")}</dd>
           <dt>Роль</dt><dd>${enumLabel("participantRole", user.role || "viewer")}</dd>
-          ${state.role === "admin" ? `<dt>Email</dt><dd>${escapeHtml(user.email || "—")}</dd><dt>Телефон</dt><dd>${escapeHtml(user.phone || "—")}</dd>` : ""}
+          ${
+            showContacts
+              ? `<dt>Email</dt><dd>${escapeHtml(user.email || "—")}</dd><dt>Телефон</dt><dd>${escapeHtml(user.phone || "—")}</dd>`
+              : ""
+          }
         </dl>
       </div>
     `;
@@ -1567,22 +1737,29 @@ async function openUserDetail(userId) {
   }
 }
 
-function renderResourceDetailCard(resource) {
+function renderResourceDetailCard(resource, meta = {}) {
   const root = document.getElementById("resource-detail-root");
   const canManage = canCreate();
   const allocs = Array.isArray(resource.allocations) ? resource.allocations : [];
+  const { eventTitle = "Мероприятие", ownerName = "—", taskById = {} } = meta;
 
   const allocBlock =
     allocs.length === 0
       ? '<p class="list-item-meta">Нет выделений.</p>'
       : allocs
-          .map(
-            (a) => `
+          .map((a) => {
+            const tid = a.task_id;
+            const titleFromMap = tid != null ? taskById[tid] : "";
+            const taskHtml =
+              tid == null
+                ? "—"
+                : `<button type="button" class="entity-link" data-entity-link="task" data-id="${tid}" data-return-event="${resource.event_id}">${escapeHtml(titleFromMap || "Без названия")}</button>`;
+            return `
     <article class="list-item">
       <p class="list-item-title">Выделение #${a.id} <span class="badge">${enumLabel("allocationStatus", a.status)}</span></p>
-      <p class="list-item-meta">Задача: ${a.task_id ?? "—"} | ${new Date(a.date_start).toLocaleString()} — ${new Date(a.date_end).toLocaleString()}</p>
-    </article>`
-          )
+      <p class="list-item-meta">Задача: ${taskHtml} | ${new Date(a.date_start).toLocaleString()} — ${new Date(a.date_end).toLocaleString()}</p>
+    </article>`;
+          })
           .join("");
 
   const editSection = canManage
@@ -1619,11 +1796,11 @@ function renderResourceDetailCard(resource) {
 
   root.innerHTML = `
     <div class="panel">
-      <p class="list-item-meta">Мероприятие: <button type="button" class="entity-link" data-entity-link="event" data-id="${resource.event_id}">#${resource.event_id}</button></p>
+      <p class="list-item-meta">Мероприятие: <button type="button" class="entity-link" data-entity-link="event" data-id="${resource.event_id}">${escapeHtml(eventTitle)}</button></p>
       <dl class="detail-dl">
         <dt>ID</dt><dd>${resource.id}</dd>
         <dt>Тип</dt><dd>${enumLabel("resourceType", resource.type)}</dd>
-        <dt>Владелец</dt><dd>${resource.owner_id}</dd>
+        <dt>Владелец</dt><dd><button type="button" class="entity-link" data-entity-link="user" data-id="${resource.owner_id}">${escapeHtml(ownerName)}</button></dd>
         <dt>Количество</dt><dd>${resource.quantity}</dd>
         <dt>Стоимость/час</dt><dd>${resource.cost_per_hour ?? "—"}</dd>
       </dl>
@@ -1638,7 +1815,7 @@ function renderResourceDetailCard(resource) {
 
   if (canManage) {
     document.getElementById("resource-open-allocation-btn").addEventListener("click", () => {
-      openAllocationCreatePanel({ eventId: resource.event_id, resourceId: resource.id });
+      void openAllocationCreatePanel({ eventId: resource.event_id, resourceId: resource.id });
     });
     document.getElementById("resource-toggle-edit-btn").addEventListener("click", () => {
       document.getElementById("resource-edit-section").classList.remove("hidden");
@@ -1852,26 +2029,31 @@ async function onUsersListClick(event) {
   }
 }
 
-function onAllocationEventChange(event) {
+async function onAllocationEventChange(event) {
   const eventId = Number(event.target.value) || null;
   state.allocationPreset.eventId = eventId;
   state.allocationPreset.taskId = null;
   state.allocationPreset.resourceId = null;
-  populateAllocationTaskOptions(eventId, null);
+  await populateAllocationTaskOptions(eventId, null);
   populateAllocationResourceOptions(eventId, null);
 }
 
-function onAllocationTaskChange(event) {
+async function onAllocationTaskChange(event) {
   const taskId = Number(event.target.value) || null;
   state.allocationPreset.taskId = taskId;
   if (!taskId) return;
-  const task = state.tasks.find((item) => item.id === taskId);
+  let task;
+  try {
+    task = await apiRequest(`${API.tasks}${taskId}`);
+  } catch {
+    return;
+  }
   if (!task) return;
   state.allocationPreset.eventId = task.event_id;
   if (el.allocationEventSelect) {
     el.allocationEventSelect.value = String(task.event_id);
   }
-  populateAllocationTaskOptions(task.event_id, taskId);
+  await populateAllocationTaskOptions(task.event_id, taskId);
   populateAllocationResourceOptions(task.event_id, state.allocationPreset.resourceId);
   const form = document.getElementById("allocation-form");
   if (form) {
@@ -1906,7 +2088,7 @@ async function onAllocationCreate(event) {
     form.reset();
     state.allocationPreset = { eventId: null, taskId: null, resourceId: null };
     populateAllocationEventOptions();
-    populateAllocationTaskOptions(null);
+    void populateAllocationTaskOptions(null);
     populateAllocationResourceOptions(null);
   } catch (error) {
     setFormError(form, `Ошибка создания выделения: ${error.message}`);
@@ -2124,6 +2306,17 @@ async function onAccountCabinetSave(event) {
   }
 }
 
+async function onTasksFilterSubmit(event) {
+  event.preventDefault();
+  state.tasksFilters.eventId = document.getElementById("tasks-filter-event")?.value || "";
+  state.tasksFilters.status = document.getElementById("tasks-filter-status")?.value || "";
+  state.tasksFilters.priority = document.getElementById("tasks-filter-priority")?.value || "";
+  state.tasksFilters.q = document.getElementById("tasks-filter-q")?.value || "";
+  const ps = document.getElementById("tasks-page-size");
+  if (ps) state.tasksLimit = Math.min(100, Math.max(1, Number(ps.value) || 25));
+  await loadTasksPage({ resetPage: true });
+}
+
 function bindEvents() {
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.addEventListener("click", () => setScreen(btn.dataset.screen));
@@ -2170,6 +2363,36 @@ function bindEvents() {
   document.getElementById("auth-tab-register").addEventListener("click", () => setAuthView("register"));
   document.getElementById("event-form").addEventListener("submit", onEventCreate);
   document.getElementById("task-form").addEventListener("submit", onTaskCreate);
+  const tasksFilterForm = document.getElementById("tasks-filter-form");
+  if (tasksFilterForm) {
+    tasksFilterForm.addEventListener("submit", (e) => {
+      void onTasksFilterSubmit(e);
+    });
+  }
+  const tasksPrev = document.getElementById("tasks-page-prev");
+  if (tasksPrev) {
+    tasksPrev.addEventListener("click", () => {
+      state.tasksSkip = Math.max(0, state.tasksSkip - state.tasksLimit);
+      void loadTasksPage();
+    });
+  }
+  const tasksNext = document.getElementById("tasks-page-next");
+  if (tasksNext) {
+    tasksNext.addEventListener("click", () => {
+      if (state.tasksSkip + state.tasksLimit < state.tasksTotal) {
+        state.tasksSkip += state.tasksLimit;
+        void loadTasksPage();
+      }
+    });
+  }
+  const tasksPageSize = document.getElementById("tasks-page-size");
+  if (tasksPageSize) {
+    tasksPageSize.addEventListener("change", (e) => {
+      state.tasksLimit = Math.min(100, Math.max(1, Number(e.target.value) || 25));
+      state.tasksSkip = 0;
+      void loadTasksPage();
+    });
+  }
   document.getElementById("task-event-select").addEventListener("change", (e) => {
     void onTaskEventChange(e);
   });
@@ -2179,15 +2402,21 @@ function bindEvents() {
   document.getElementById("allocation-form").addEventListener("submit", (e) => {
     void onAllocationCreate(e);
   });
-  document.getElementById("allocation-event-select").addEventListener("change", onAllocationEventChange);
-  document.getElementById("allocation-task-select").addEventListener("change", onAllocationTaskChange);
+  document.getElementById("allocation-event-select").addEventListener("change", (e) => {
+    void onAllocationEventChange(e);
+  });
+  document.getElementById("allocation-task-select").addEventListener("change", (e) => {
+    void onAllocationTaskChange(e);
+  });
   document.getElementById("resource-form").addEventListener("submit", onResourceCreate);
   document.getElementById("ai-form").addEventListener("submit", onAiGenerate);
   document.getElementById("logout-btn").addEventListener("click", () => {
     clearSession();
     syncAuthUi();
     state.events = [];
-    state.tasks = [];
+    state.tasksPage = [];
+    state.tasksTotal = 0;
+    state.taskMetrics = { total: 0, overdue: 0 };
     state.resources = [];
     state.usersList = [];
     renderEvents();
