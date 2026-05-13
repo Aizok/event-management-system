@@ -1081,6 +1081,9 @@ function buildEventTimeline(tasks, event) {
   const span = Math.max(maxEnd - minStart, 1);
 
   const hourStep = 60 * 60 * 1000;
+  const hourSlots = Math.max(1, Math.ceil(span / hourStep));
+  const PIXELS_PER_HOUR = 32;
+  const trackMinHeightPx = Math.max(820, hourSlots * PIXELS_PER_HOUR);
   const startHour = Math.floor(minStart / hourStep) * hourStep;
   const endHour = Math.ceil(maxEnd / hourStep) * hourStep;
   const ticks = [];
@@ -1105,10 +1108,11 @@ function buildEventTimeline(tasks, event) {
     })
     .join("");
 
+  const trackH = trackMinHeightPx;
   return `
     <div class="event-vertical-timeline">
-      <div class="event-vertical-axis">${ticks.join("")}</div>
-      <div class="event-vertical-track">${items}</div>
+      <div class="event-vertical-axis" style="min-height:${trackH}px">${ticks.join("")}</div>
+      <div class="event-vertical-track" style="min-height:${trackH}px">${items}</div>
     </div>
   `;
 }
