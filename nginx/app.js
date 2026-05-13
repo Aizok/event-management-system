@@ -1046,7 +1046,7 @@ function buildMermaidDependencyGraph(tasks, depMap) {
   const taskIds = new Set(tasks.map((task) => task.id));
   const nodes = tasks.map((task) => {
     const safeTitle = String(task.title || "").replace(/"/g, '\\"').slice(0, 60);
-    return `task_${task.id}["#${task.id}: ${safeTitle}"]`;
+    return `task_${task.id}["${safeTitle}"]`;
   });
   const edges = [];
   tasks.forEach((task) => {
@@ -1070,10 +1070,14 @@ function buildEventTimeline(tasks, event) {
     return '<p class="list-item-meta">Нет задач с валидными плановыми датами для построения таймлайна.</p>';
   }
 
-  const eventStart = event?.start_time ? new Date(event.start_time).getTime() : null;
-  const eventEnd = event?.end_time ? new Date(event.end_time).getTime() : null;
-  const minStart = Number.isFinite(eventStart) ? eventStart : Math.min(...datedTasks.map((x) => x.start));
-  const maxEnd = Number.isFinite(eventEnd) ? eventEnd : Math.max(...datedTasks.map((x) => x.end));
+  const eventStart = event?.start_time ? new Date(event.start_time).getTime() : NaN;
+  const eventEnd = event?.end_time ? new Date(event.end_time).getTime() : NaN;
+  const tasksMinStart = Math.min(...datedTasks.map((x) => x.start));
+  const tasksMaxEnd = Math.max(...datedTasks.map((x) => x.end));
+  let minStart = tasksMinStart;
+  let maxEnd = tasksMaxEnd;
+  if (Number.isFinite(eventStart)) minStart = Math.min(minStart, eventStart);
+  if (Number.isFinite(eventEnd)) maxEnd = Math.max(maxEnd, eventEnd);
   const span = Math.max(maxEnd - minStart, 1);
 
   const hourStep = 60 * 60 * 1000;
@@ -1094,7 +1098,7 @@ function buildEventTimeline(tasks, event) {
         <div class="event-vertical-item" style="top:${top.toFixed(2)}%;height:${height.toFixed(2)}%">
           <div class="event-vertical-bar"></div>
           <div class="event-vertical-content">
-            <p class="event-vertical-title">#${task.id} ${escapeHtml(task.title)}</p>
+            <p class="event-vertical-title">${escapeHtml(task.title)}</p>
             <p class="event-vertical-meta">${formatDateTime(task.start_time)} — ${formatDateTime(task.end_time)}</p>
           </div>
         </div>`;
@@ -1148,14 +1152,14 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
                 : deps
                     .map((did) => {
                       const dt = taskById[did];
-                      return dt ? `#${did} «${escapeHtml(dt.title)}»` : `#${did}`;
+                      return dt ? `«${escapeHtml(dt.title)}»` : "другая задача";
                     })
                     .join("; ");
             return `
         <article class="list-item">
           <p class="list-item-title">
             <button type="button" class="entity-link" data-entity-link="task" data-id="${t.id}" data-return-event="${event.id}">
-              #${t.id} ${escapeHtml(t.title)}
+              ${escapeHtml(t.title)}
             </button>
             <span class="badge">${enumLabel("taskStatus", t.status)}</span>
             <span class="badge">${enumLabel("taskPriority", t.priority)}</span>
@@ -1196,7 +1200,7 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
         <article class="list-item">
           <p class="list-item-title">
             <button type="button" class="entity-link" data-entity-link="resource" data-id="${resource.id}">
-              #${resource.id} ${escapeHtml(resource.name)}
+              ${escapeHtml(resource.name)}
             </button>
             <span class="badge">${enumLabel("resourceType", resource.type)}</span>
           </p>
