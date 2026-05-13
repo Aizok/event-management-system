@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
@@ -42,12 +43,25 @@ async def create_user_profile(
         auth_user_id=token_data.user_id
     )
 
-    user = await user_crud.create(
-        db=db,
-        obj_in=user_in,
-        owner_id=token_data.user_id,
-        email=email
-    )
+    try:
+        user = await user_crud.create(
+            db=db,
+            obj_in=user_in,
+            owner_id=token_data.user_id,
+            email=email
+        )
+    except IntegrityError as error:
+        await db.rollback()
+        details = str(getattr(error, "orig", error))
+        if "ix_user_profiles_email" in details:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email already in use"
+            ) from error
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Profile data violates uniqueness constraints"
+        ) from error
     return user
 
 

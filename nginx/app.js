@@ -1988,7 +1988,11 @@ async function onAiGenerate(event) {
 async function onProfileCreate(event) {
   event.preventDefault();
   const form = event.target;
+  setFormError(form, "");
   const payload = serializeForm(form);
+  payload.phone = payload.phone?.trim() || null;
+  payload.speciality = payload.speciality?.trim() || null;
+  payload.bio = payload.bio?.trim() || null;
   try {
     await apiRequest(`${API.users}/`, {
       method: "POST",
@@ -1999,6 +2003,7 @@ async function onProfileCreate(event) {
     setProfileRequired(false);
     await refreshData();
   } catch (error) {
+    setFormError(form, `Ошибка создания профиля: ${error.message}`);
     notify(`Ошибка создания профиля: ${error.message}`, true);
   }
 }

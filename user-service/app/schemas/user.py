@@ -9,14 +9,14 @@ class UserCreate(BaseModel):
     first_name: str=Field(..., min_length=1, max_length=100)
     last_name: str=Field(..., min_length=1, max_length=100)
     phone: Optional[str]=Field(None, max_length=20)
-    speciality: Optional[str]=Field(None, max_length=20)
+    speciality: Optional[str]=Field(None, max_length=100)
 
 
 class UserUpdate(BaseModel):
     first_name: Optional[str] = Field(None, min_length=1, max_length=100)
     last_name: Optional[str] = Field(None, min_length=1, max_length=100)
     phone: Optional[str] = Field(None, max_length=20)
-    speciality: Optional[str] = Field(None, max_length=20)
+    speciality: Optional[str] = Field(None, max_length=100)
     bio: Optional[str] = Field(None, max_length=255)
 
 
