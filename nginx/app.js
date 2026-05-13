@@ -77,6 +77,21 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+function formatPublicProfileName(profile) {
+  if (!profile) return "";
+  const a = String(profile.first_name || "").trim();
+  const b = String(profile.last_name || "").trim();
+  return [a, b].filter(Boolean).join(" ").trim();
+}
+
+/** Кнопка перехода к профилю; при отсутствии ФИО в публичном профиле подпись «Профиль». */
+function userProfileLinkButton(userId, profile) {
+  if (userId == null || userId === "") return "—";
+  const name = formatPublicProfileName(profile);
+  const label = name || "Профиль";
+  return `<button type="button" class="entity-link" data-entity-link="user" data-id="${userId}">${escapeHtml(label)}</button>`;
+}
+
 const enumLabels = {
   eventStatus: {
     draft: "Черновик",
@@ -1033,8 +1048,18 @@ async function openEventDetail(eventId) {
       depMap[t.id] = r.status === "fulfilled" && r.value?.depends_on ? r.value.depends_on : [];
     });
 
+    let ownerProfile = event.owner_id != null ? participantProfiles[event.owner_id] ?? null : null;
+    if (!ownerProfile && event.owner_id != null) {
+      try {
+        const owners = await apiRequest(`${API.users}/public/by-ids?ids=${event.owner_id}`);
+        ownerProfile = Array.isArray(owners) && owners[0] ? owners[0] : null;
+      } catch {
+        ownerProfile = null;
+      }
+    }
+
     el.screenTitle.textContent = event.title || `Мероприятие #${eventId}`;
-    renderEventDetailCard(event, tasks, depMap, participants, participantProfiles, eventResources);
+    renderEventDetailCard(event, tasks, depMap, participants, participantProfiles, eventResources, ownerProfile);
     notify("Готово");
   } catch (error) {
     notify(error.message, true);
@@ -1139,7 +1164,7 @@ async function renderEventDependencyMermaid(tasks, depMap) {
   }
 }
 
-function renderEventDetailCard(event, tasks, depMap, participants, participantProfiles, eventResources) {
+function renderEventDetailCard(event, tasks, depMap, participants, participantProfiles, eventResources, ownerProfile) {
   const root = document.getElementById("event-detail-root");
   const canManage = canCreate();
   const taskById = Object.fromEntries(tasks.map((t) => [t.id, t]));
@@ -1217,11 +1242,11 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
     ? `
     <div class="panel">
       <div class="detail-actions">
+        <button type="button" class="btn btn-muted btn-inline" id="event-toggle-edit-btn">Редактировать</button>
+        <button type="button" class="btn btn-muted btn-inline" id="event-open-users-btn">+ Добавить участника</button>
         <button type="button" class="btn btn-muted btn-inline" id="event-open-task-create-btn">+ Создать задачу</button>
         <button type="button" class="btn btn-muted btn-inline" id="event-open-resource-create-btn">+ Создать ресурс</button>
-        <button type="button" class="btn btn-muted btn-inline" id="event-open-users-btn">+ Добавить участника</button>
         <button type="button" class="btn btn-muted btn-inline" id="event-open-allocation-btn">+ Создать выделение ресурса</button>
-        <button type="button" class="btn btn-muted btn-inline" id="event-toggle-edit-btn">Редактировать</button>
       </div>
       <div id="event-edit-section" class="hidden" style="margin-top:12px">
         <h3>Редактирование</h3>
@@ -1255,7 +1280,7 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
       <dl class="detail-dl">
         <dt>ID</dt><dd>${event.id}</dd>
         <dt>Статус</dt><dd>${enumLabel("eventStatus", event.status)}</dd>
-        <dt>Владелец</dt><dd>${event.owner_id}</dd>
+        <dt>Владелец</dt><dd>${userProfileLinkButton(event.owner_id, ownerProfile)}</dd>
         <dt>Начало</dt><dd>${new Date(event.start_time).toLocaleString()}</dd>
         <dt>Окончание</dt><dd>${new Date(event.end_time).toLocaleString()}</dd>
         <dt>Локация</dt><dd>${escapeHtml(event.location || "—")}</dd>
@@ -1381,6 +1406,31 @@ async function openTaskDetail(taskId, opts = {}) {
   try {
     const task = await apiRequest(`${API.tasks}${taskId}`);
     el.screenTitle.textContent = task.title || `Задача #${taskId}`;
+    let eventRecord = null;
+    try {
+      eventRecord = await apiRequest(`${API.events}${task.event_id}`);
+    } catch {
+      eventRecord = null;
+    }
+    const eventTitle =
+      eventRecord?.title?.trim() ? eventRecord.title : getEventTitle(task.event_id) || "Мероприятие";
+    const profileIds = [task.owner_id, task.assignee_id].filter((id) => id != null && id !== "");
+    let profilesById = {};
+    if (profileIds.length) {
+      const params = new URLSearchParams();
+      [...new Set(profileIds.map(Number))].forEach((id) => params.append("ids", String(id)));
+      try {
+        const plist = await apiRequest(`${API.users}/public/by-ids?${params.toString()}`);
+        profilesById = Object.fromEntries((plist || []).map((p) => [Number(p.id), p]));
+      } catch {
+        profilesById = {};
+      }
+    }
+    const taskDetailMeta = {
+      eventTitle,
+      ownerProfile: profilesById[Number(task.owner_id)],
+      assigneeProfile: task.assignee_id != null ? profilesById[Number(task.assignee_id)] : null
+    };
     let dependsOn = [];
     let eventTasksForDeps = [];
     try {
@@ -1398,7 +1448,7 @@ async function openTaskDetail(taskId, opts = {}) {
         notify(`Не удалось загрузить зависимости: ${depErr.message}`, true);
       }
     }
-    renderTaskDetailCard(task, dependsOn, eventTasksForDeps);
+    renderTaskDetailCard(task, dependsOn, eventTasksForDeps, taskDetailMeta);
     notify("Готово");
   } catch (error) {
     notify(error.message, true);
@@ -1441,11 +1491,15 @@ function buildTaskDependenciesPanel(task, dependsOnIds, eventTasksList = []) {
     </div>`;
 }
 
-function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = []) {
+function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], meta = {}) {
   const root = document.getElementById("task-detail-root");
   const mode = taskDetailMode(task);
   const canManage = canCreate();
   const depsSection = mode === "full" && canManage ? buildTaskDependenciesPanel(task, dependsOnIds, eventTasksForDeps) : "";
+  const eventTitle = meta.eventTitle?.trim() ? meta.eventTitle : "Мероприятие";
+  const assigneeDd =
+    task.assignee_id == null ? "—" : userProfileLinkButton(task.assignee_id, meta.assigneeProfile);
+  const ownerDd = userProfileLinkButton(task.owner_id, meta.ownerProfile);
 
   const statusSelect = (name, current, options = ["todo", "in_progress", "done", "overdue", "blocked"]) => `
     <select name="${name}">
@@ -1510,13 +1564,13 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = []) {
 
   root.innerHTML = `
     <div class="panel">
-      <p class="list-item-meta">Мероприятие: <button type="button" class="entity-link" data-entity-link="event" data-id="${task.event_id}">#${task.event_id}</button></p>
+      <p class="list-item-meta">Мероприятие: <button type="button" class="entity-link" data-entity-link="event" data-id="${task.event_id}">${escapeHtml(eventTitle)}</button></p>
       <dl class="detail-dl">
         <dt>ID</dt><dd>${task.id}</dd>
         <dt>Статус</dt><dd>${enumLabel("taskStatus", task.status)}</dd>
         <dt>Приоритет</dt><dd>${enumLabel("taskPriority", task.priority)}</dd>
-        <dt>Исполнитель</dt><dd>${task.assignee_id ?? "—"}</dd>
-        <dt>Владелец</dt><dd>${task.owner_id}</dd>
+        <dt>Исполнитель</dt><dd>${assigneeDd}</dd>
+        <dt>Владелец</dt><dd>${ownerDd}</dd>
         <dt>Дедлайн</dt><dd>${new Date(task.deadline).toLocaleString()}</dd>
         <dt>План: старт — окончание</dt><dd>${new Date(task.start_time).toLocaleString()} — ${new Date(task.end_time).toLocaleString()}</dd>
       </dl>
