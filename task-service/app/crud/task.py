@@ -33,6 +33,12 @@ def calculate_delay(task: Task) -> timedelta | None:
 
 class TaskCRUD:
     async def create(self, db: AsyncSession, obj_in: TaskCreate, owner_id: int) -> Task:
+        if obj_in.start_time >= obj_in.end_time:
+            raise ValueError("start_time must be < end_time")
+
+        if obj_in.end_time > obj_in.deadline:
+            raise ValueError("end_time must be <= deadline")
+
         db_obj=Task(
             **obj_in.model_dump(),
             owner_id=owner_id

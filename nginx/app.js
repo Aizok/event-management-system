@@ -695,7 +695,9 @@ function populateAllocationResourceOptions(eventId, selectedResourceId = null) {
   const options = ['<option value="">Выберите ресурс</option>'];
   resources.forEach((resource) => {
     const selected = selectedResourceId != null && Number(selectedResourceId) === resource.id ? "selected" : "";
-    options.push(`<option value="${resource.id}" ${selected}>#${resource.id} ${escapeHtml(resource.name)}</option>`);
+    options.push(
+      `<option value="${resource.id}" ${selected}>${escapeHtml(resource.name)} (${enumLabel("resourceType", resource.type)})</option>`
+    );
   });
   el.allocationResourceSelect.innerHTML = options.join("");
 }
@@ -1549,7 +1551,7 @@ function buildTaskDependenciesPanel(task, dependsOnIds, eventTasksList = []) {
       : `<ul class="list">${dependsOnIds
           .map((did) => {
             const t = taskById[did];
-            const label = t ? `#${did} — ${escapeHtml(t.title)}` : `#${did}`;
+            const label = t ? escapeHtml(t.title) : "Задача недоступна в списке мероприятия";
             return `<li class="list-item" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>${label}</span><button type="button" class="btn btn-muted btn-inline task-dep-remove-btn" data-depends-on="${did}">Удалить</button></li>`;
           })
           .join("")}</ul>`;
@@ -1560,7 +1562,7 @@ function buildTaskDependenciesPanel(task, dependsOnIds, eventTasksList = []) {
   const selectOpts =
     '<option value="">Выберите задачу-предшественник</option>' +
     candidates
-      .map((t) => `<option value="${t.id}">#${t.id} — ${escapeHtml(t.title)}</option>`)
+      .map((t) => `<option value="${t.id}">${escapeHtml(t.title)}</option>`)
       .join("");
 
   return `

@@ -44,7 +44,10 @@ async def create_task(
                 detail="Not enough permissions"
             )
 
-    task=await task_crud.create(db=db, obj_in=task_in, owner_id=user_id)
+    try:
+        task=await task_crud.create(db=db, obj_in=task_in, owner_id=user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     """Отправка события TaskCreated"""
     await publish_task_created(db, task.id)
@@ -158,11 +161,14 @@ async def create_task_internal(
             detail="Not allowed"
         )
 
-    task=await task_crud.create(
-        db=db,
-        obj_in=task_in,
-        owner_id=owner_id
-    )
+    try:
+        task=await task_crud.create(
+            db=db,
+            obj_in=task_in,
+            owner_id=owner_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     await publish_task_created(db, task.id)
     return task
