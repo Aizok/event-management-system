@@ -407,7 +407,7 @@ function updateTopbarActions() {
     const allocBtn = document.createElement("button");
     allocBtn.type = "button";
     allocBtn.className = "btn btn-muted btn-inline";
-    allocBtn.textContent = "+ Создать выделение";
+    allocBtn.textContent = "+ Создать назначение";
     allocBtn.addEventListener("click", () => {
       const panel = document.getElementById("allocation-create-panel");
       if (panel) {
@@ -1148,6 +1148,44 @@ function buildEventTimeline(tasks, event) {
   `;
 }
 
+function buildEventDependenciesEditor(tasks, _depMap, eventId) {
+  const taskOpts = tasks.map((t) => `<option value="${t.id}">${escapeHtml(t.title)}</option>`).join("");
+  const succSelect = `<option value="">Выберите задачу</option>${taskOpts}`;
+  const predSelect = `<option value="">Выберите предшественника</option>${taskOpts}`;
+
+  return `
+    <div class="panel event-deps-editor" data-event-id="${eventId}">
+      <h3>Зависимости между задачами</h3>
+      <p class="list-item-meta">Задача «наследник» не начнётся, пока не завершена «предшественник». Зависимости только между задачами этого мероприятия. Текущие связи отображаются на графе ниже; удалить зависимость можно на странице задачи.</p>
+      <div class="event-deps-add-row detail-actions">
+        <label class="event-deps-field"><span class="event-deps-field-label">Задача (кому нужен предшественник)</span>
+          <select id="event-dep-successor-select">${succSelect}</select>
+        </label>
+        <label class="event-deps-field"><span class="event-deps-field-label">Зависит от (сначала выполнить)</span>
+          <select id="event-dep-predecessor-select">${predSelect}</select>
+        </label>
+        <button type="button" class="btn btn-primary" id="event-dep-add-btn">Добавить зависимость</button>
+      </div>
+    </div>`;
+}
+
+function syncEventDepPredecessorOptions(tasks, depMap) {
+  const succ = document.getElementById("event-dep-successor-select");
+  const pred = document.getElementById("event-dep-predecessor-select");
+  if (!succ || !pred) return;
+  const sid = succ.value ? Number(succ.value) : NaN;
+  const currentPred = pred.value ? Number(pred.value) : null;
+  const existing = Number.isFinite(sid) ? depMap[sid] || [] : [];
+  let html = '<option value="">Выберите предшественника</option>';
+  tasks.forEach((t) => {
+    if (Number.isFinite(sid) && t.id === sid) return;
+    if (Number.isFinite(sid) && existing.includes(t.id)) return;
+    const sel = currentPred === t.id ? "selected" : "";
+    html += `<option value="${t.id}" ${sel}>${escapeHtml(t.title)}</option>`;
+  });
+  pred.innerHTML = html;
+}
+
 async function renderEventDependencyMermaid(tasks, depMap) {
   const root = document.getElementById("event-dependency-graph-root");
   if (!root) return;
@@ -1170,15 +1208,27 @@ async function renderEventDependencyMermaid(tasks, depMap) {
   }
 }
 
+function sortTasksByPlannedStart(tasks) {
+  return [...tasks].sort((a, b) => {
+    const ta = a.start_time ? new Date(a.start_time).getTime() : NaN;
+    const tb = b.start_time ? new Date(b.start_time).getTime() : NaN;
+    const va = Number.isFinite(ta) ? ta : Number.POSITIVE_INFINITY;
+    const vb = Number.isFinite(tb) ? tb : Number.POSITIVE_INFINITY;
+    if (va !== vb) return va - vb;
+    return a.id - b.id;
+  });
+}
+
 function renderEventDetailCard(event, tasks, depMap, participants, participantProfiles, eventResources, ownerProfile) {
   const root = document.getElementById("event-detail-root");
   const canManage = canCreate();
   const taskById = Object.fromEntries(tasks.map((t) => [t.id, t]));
+  const tasksForList = sortTasksByPlannedStart(tasks);
 
   const tasksBlock =
     tasks.length === 0
       ? '<p class="list-item-meta">Задач по этому мероприятию нет.</p>'
-      : tasks
+      : tasksForList
           .map((t) => {
             const deps = depMap[t.id] || [];
             const depText =
@@ -1190,14 +1240,20 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
                       return dt ? `«${escapeHtml(dt.title)}»` : "другая задача";
                     })
                     .join("; ");
+            const deleteBtn = canManage
+              ? `<button type="button" class="btn btn-danger btn-inline" data-event-task-delete="${t.id}">Удалить</button>`
+              : "";
             return `
         <article class="list-item">
-          <p class="list-item-title">
+          <p class="list-item-title event-detail-task-row">
+            <span class="event-detail-task-row-titleblock">
             <button type="button" class="entity-link" data-entity-link="task" data-id="${t.id}" data-return-event="${event.id}">
               ${escapeHtml(t.title)}
             </button>
             <span class="badge">${enumLabel("taskStatus", t.status)}</span>
             <span class="badge">${enumLabel("taskPriority", t.priority)}</span>
+            </span>
+            ${deleteBtn}
           </p>
           <p class="list-item-meta">План: ${formatDateTime(t.start_time)} — ${formatDateTime(t.end_time)}</p>
           <p class="list-item-meta">Дедлайн: ${formatDateTime(t.deadline)}</p>
@@ -1252,7 +1308,7 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
         <button type="button" class="btn btn-muted btn-inline" id="event-open-users-btn">+ Добавить участника</button>
         <button type="button" class="btn btn-muted btn-inline" id="event-open-task-create-btn">+ Создать задачу</button>
         <button type="button" class="btn btn-muted btn-inline" id="event-open-resource-create-btn">+ Создать ресурс</button>
-        <button type="button" class="btn btn-muted btn-inline" id="event-open-allocation-btn">+ Создать выделение ресурса</button>
+        <button type="button" class="btn btn-muted btn-inline" id="event-open-allocation-btn">+ Создать назначение ресурса</button>
       </div>
       <div id="event-edit-section" class="hidden" style="margin-top:12px">
         <h3>Редактирование</h3>
@@ -1281,6 +1337,9 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
     </div>`
     : "";
 
+  const eventDepsEditorBlock =
+    canManage && tasks.length > 0 ? buildEventDependenciesEditor(tasks, depMap, event.id) : "";
+
   root.innerHTML = `
     <div class="panel">
       <dl class="detail-dl">
@@ -1308,6 +1367,7 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
       <h3>Задачи и зависимости</h3>
       ${tasksBlock}
     </div>
+    ${eventDepsEditorBlock}
     <div class="panel">
       <h3>Граф зависимостей задач</h3>
       <div id="event-dependency-graph-root">
@@ -1342,6 +1402,22 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
     });
     document.getElementById("event-edit-form").addEventListener("submit", (e) => onEventEditSubmit(e, event.id));
     document.getElementById("event-delete-btn").addEventListener("click", () => onEventDelete(event.id));
+
+    root.querySelectorAll("[data-event-task-delete]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        void onTaskDelete(Number(btn.dataset.eventTaskDelete), { reopenEventId: event.id });
+      });
+    });
+
+    const depEditor = root.querySelector(".event-deps-editor");
+    if (depEditor) {
+      const succSel = document.getElementById("event-dep-successor-select");
+      succSel?.addEventListener("change", () => syncEventDepPredecessorOptions(tasks, depMap));
+      syncEventDepPredecessorOptions(tasks, depMap);
+      document.getElementById("event-dep-add-btn")?.addEventListener("click", () => void onEventDepAdd(event.id));
+    }
   }
   void renderEventDependencyMermaid(tasks, depMap);
 }
@@ -1519,7 +1595,7 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
     editSection = `
     <div class="panel">
       <div class="detail-actions">
-        <button type="button" class="btn btn-muted btn-inline" id="task-open-allocation-btn">+ Создать выделение ресурса</button>
+        <button type="button" class="btn btn-muted btn-inline" id="task-open-allocation-btn">+ Создать назначение ресурса</button>
         <button type="button" class="btn btn-muted btn-inline" id="task-toggle-edit-btn">Редактировать</button>
       </div>
       <div id="task-edit-section" class="hidden" style="margin-top:12px">
@@ -1698,11 +1774,38 @@ async function onTaskDependencyRemove(taskId, dependsOnTaskId) {
   }
 }
 
-async function onTaskDelete(taskId) {
+async function onEventDepAdd(eventId) {
+  const succ = document.getElementById("event-dep-successor-select");
+  const pred = document.getElementById("event-dep-predecessor-select");
+  if (!succ?.value || !pred?.value) {
+    notify("Выберите задачу и предшественника", true);
+    return;
+  }
+  const taskId = Number(succ.value);
+  const dependsOn = Number(pred.value);
+  if (taskId === dependsOn) {
+    notify("Задача не может зависеть от самой себя", true);
+    return;
+  }
+  try {
+    await apiRequest(`${API.tasks}${taskId}/dependencies/${dependsOn}`, { method: "POST" });
+    notify("Зависимость добавлена");
+    await openEventDetail(eventId);
+  } catch (error) {
+    notify(`Не удалось добавить зависимость: ${error.message}`, true);
+  }
+}
+
+async function onTaskDelete(taskId, opts = {}) {
   if (!confirm("Удалить задачу?")) return;
   try {
     await apiRequest(`${API.tasks}${taskId}`, { method: "DELETE" });
     notify("Задача удалена");
+    if (opts.reopenEventId != null) {
+      await openEventDetail(opts.reopenEventId);
+      await refreshData();
+      return;
+    }
     state.detailBackTarget = null;
     state.detailView = null;
     hideAllScreens();
@@ -1813,7 +1916,7 @@ function renderResourceDetailCard(resource, meta = {}) {
 
   const allocBlock =
     allocs.length === 0
-      ? '<p class="list-item-meta">Нет выделений.</p>'
+      ? '<p class="list-item-meta">Нет назначений.</p>'
       : allocs
           .map((a) => {
             const tid = a.task_id;
@@ -1824,7 +1927,7 @@ function renderResourceDetailCard(resource, meta = {}) {
                 : `<button type="button" class="entity-link" data-entity-link="task" data-id="${tid}" data-return-event="${resource.event_id}">${escapeHtml(titleFromMap || "Без названия")}</button>`;
             return `
     <article class="list-item">
-      <p class="list-item-title">Выделение #${a.id} <span class="badge">${enumLabel("allocationStatus", a.status)}</span></p>
+      <p class="list-item-title">Назначение #${a.id} <span class="badge">${enumLabel("allocationStatus", a.status)}</span></p>
       <p class="list-item-meta">Задача: ${taskHtml} | ${new Date(a.date_start).toLocaleString()} — ${new Date(a.date_end).toLocaleString()}</p>
     </article>`;
           })
@@ -1834,7 +1937,7 @@ function renderResourceDetailCard(resource, meta = {}) {
     ? `
     <div class="panel">
       <div class="detail-actions">
-        <button type="button" class="btn btn-muted btn-inline" id="resource-open-allocation-btn">+ Создать выделение ресурса</button>
+        <button type="button" class="btn btn-muted btn-inline" id="resource-open-allocation-btn">+ Создать назначение ресурса</button>
         <button type="button" class="btn btn-muted btn-inline" id="resource-toggle-edit-btn">Редактировать</button>
       </div>
       <div id="resource-edit-section" class="hidden" style="margin-top:12px">
@@ -1876,7 +1979,7 @@ function renderResourceDetailCard(resource, meta = {}) {
     </div>
     ${editSection}
     <div class="panel">
-      <h3>Выделения</h3>
+      <h3>Назначения</h3>
       ${allocBlock}
     </div>
   `;
@@ -2143,7 +2246,7 @@ async function onAllocationCreate(event) {
   payload.date_end = toIsoOrNull(payload.date_end);
 
   if (!eventId || !payload.resource_id || !payload.date_start || !payload.date_end) {
-    setFormError(form, "Заполните обязательные поля выделения");
+    setFormError(form, "Заполните обязательные поля назначения");
     return;
   }
 
@@ -2152,15 +2255,15 @@ async function onAllocationCreate(event) {
       method: "POST",
       body: JSON.stringify(payload)
     });
-    notify("Выделение создано");
+    notify("Назначение создано");
     form.reset();
     state.allocationPreset = { eventId: null, taskId: null, resourceId: null };
     populateAllocationEventOptions();
     void populateAllocationTaskOptions(null);
     populateAllocationResourceOptions(null);
   } catch (error) {
-    setFormError(form, `Ошибка создания выделения: ${error.message}`);
-    notify(`Ошибка создания выделения: ${error.message}`, true);
+    setFormError(form, `Ошибка создания назначения: ${error.message}`);
+    notify(`Ошибка создания назначения: ${error.message}`, true);
   }
 }
 

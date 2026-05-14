@@ -26,6 +26,9 @@ MAX_DESCRIPTION = 2100
 MAX_AI_RESPONSE = 20000
 MIN_GAP=0
 MAX_GAP=1800
+# Полоса планирования для задач «до мероприятия»: не весь отрезок от now до start, а последние N суток перед началом.
+BEFORE_TASKS_LOOKBACK_DAYS = 4
+BEFORE_TASKS_BUFFER_BEFORE_START = timedelta(hours=1)
 semaphore=asyncio.Semaphore(5)
 
 
@@ -65,7 +68,13 @@ def build_task_payload_with_timing(
 
     result=[]
 
-    def distribute(task_list, window_start, window_end):
+    def distribute(
+        task_list,
+        window_start,
+        window_end,
+        *,
+        cap_inter_task_gap: bool = True,
+    ):
         if not task_list:
             return []
 
@@ -108,8 +117,11 @@ def build_task_payload_with_timing(
 
         free_time = max(window_seconds - total_duration_seconds, 0)
         gap = free_time / max(len(sorted_tasks) - 1, 1)
-        gap = max(MIN_GAP, min(gap, MAX_GAP))
-        # минимум 0, максимум 30 минут
+        gap = max(MIN_GAP, gap)
+        if cap_inter_task_gap:
+            # В коротких окнах (день мероприятия) не раздвигаем задачи больше MAX_GAP.
+            # Для длинного окна «до начала» кап убираем — иначе всё слепляется у «сейчас».
+            gap = min(gap, MAX_GAP)
 
         current_time=window_start
 
@@ -128,11 +140,26 @@ def build_task_payload_with_timing(
                 current_time=end+timedelta(seconds=gap)
         return items
 
-    result+=distribute(before_tasks, now, event_start)
-    result+=distribute(during_tasks, event_start, event_end)
+    before_window_end = event_start - BEFORE_TASKS_BUFFER_BEFORE_START
+    before_window_start = max(now, before_window_end - timedelta(days=BEFORE_TASKS_LOOKBACK_DAYS))
+    if before_window_end <= before_window_start:
+        before_window_end = event_start - timedelta(minutes=30)
+        before_window_start = before_window_end - timedelta(hours=4)
+        if before_window_start < now:
+            before_window_start = now
+        if before_window_end <= before_window_start:
+            before_window_start = before_window_end - timedelta(hours=1)
 
-    after_end=event_end+timedelta(days=1)
-    result+=distribute(after_tasks, event_end, after_end)
+    result += distribute(
+        before_tasks,
+        before_window_start,
+        before_window_end,
+        cap_inter_task_gap=False,
+    )
+    result += distribute(during_tasks, event_start, event_end, cap_inter_task_gap=True)
+
+    after_end = event_end + timedelta(days=1)
+    result += distribute(after_tasks, event_end, after_end, cap_inter_task_gap=True)
 
     return [
         {

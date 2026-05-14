@@ -381,6 +381,23 @@ textarea {
   font-weight: 600;
 }
 
+.event-detail-task-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.event-detail-task-row-titleblock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .list-item-meta {
   margin: 4px 0 0;
   color: var(--muted);
@@ -488,6 +505,25 @@ textarea {
 }
 
 .ai-draft-include-label {
+  font-size: 13px;
+}
+
+.event-deps-editor .event-deps-add-row {
+  margin-top: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.event-deps-editor .event-deps-field {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.event-deps-editor .event-deps-field-label {
   font-size: 13px;
 }
 
