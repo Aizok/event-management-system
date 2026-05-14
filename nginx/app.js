@@ -256,7 +256,7 @@ function screenName(screenId) {
     tasks: "Задачи",
     resources: "Ресурсы",
     users: "Пользователи",
-    ai: "AI помощник",
+    ai: "ИИ помощник",
     "profile-cabinet": "Профиль",
     "user-detail": "Пользователь"
   };
@@ -2273,7 +2273,8 @@ async function onUsersListClick(event) {
 
   const userId = Number(addBtn.dataset.addParticipantUser);
   if (!userId) return;
-  const targetEventId = state.participantsModeEventId || Number(el.usersAddEventSelect?.value || 0);
+  const fromSelect = Number(el.usersAddEventSelect?.value || 0);
+  const targetEventId = (fromSelect > 0 ? fromSelect : state.participantsModeEventId) || 0;
   if (!targetEventId) {
     notify("Выберите мероприятие для добавления участника", true);
     return;
