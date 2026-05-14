@@ -595,7 +595,9 @@ function renderTasks() {
       ${task.status === "overdue" ? '<span class="badge badge-danger">Просрочено</span>' : ""}
     </p>
     <p class="list-item-meta">Мероприятие: ${eventTitle} | Исполнитель: ${assigneeLabel}</p>
-    <p class="list-item-meta">Дедлайн: ${new Date(task.deadline).toLocaleString()}</p>
+    <p class="list-item-meta">План: ${formatDateTime(task.start_time)} — ${formatDateTime(task.end_time)}</p>
+    <p class="list-item-meta">Факт: ${formatDateTime(task.actual_start_time)} — ${formatDateTime(task.actual_end_time)}</p>
+    <p class="list-item-meta">Дедлайн: ${formatDateTime(task.deadline)}</p>
   `;
   });
 }

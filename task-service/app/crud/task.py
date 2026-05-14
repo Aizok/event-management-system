@@ -1,4 +1,4 @@
-from sqlalchemy import select, func, update, delete, desc, or_, and_
+from sqlalchemy import select, func, update, delete, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Tuple
 from ..models.task import Task, TaskStatus, TaskPriority
@@ -67,7 +67,12 @@ class TaskCRUD:
 
 
     async def get_multi(self, db: AsyncSession, skip: int=0, limit: int=100) -> List[Task]:
-        query = select(Task).offset(skip).limit(limit).order_by(Task.created_at.desc())
+        query = (
+            select(Task)
+            .order_by(Task.start_time.asc(), Task.id.asc())
+            .offset(skip)
+            .limit(limit)
+        )
         result = await db.execute(query)
         tasks = result.scalars().all()
         for task in tasks:
@@ -76,7 +81,7 @@ class TaskCRUD:
 
 
     async def get_by_event(self, db: AsyncSession, event_id: int) -> List[Task]:
-        query=select(Task).where(Task.event_id==event_id).order_by(desc(Task.created_at))
+        query=select(Task).where(Task.event_id==event_id).order_by(Task.start_time.asc(), Task.id.asc())
         result=await db.execute(query)
         tasks = result.scalars().all()
         for task in tasks:
@@ -85,7 +90,7 @@ class TaskCRUD:
 
 
     async def get_by_assignee(self, db: AsyncSession, user_id: int):
-        query=select(Task).where(Task.assignee_id == user_id)
+        query=select(Task).where(Task.assignee_id == user_id).order_by(Task.start_time.asc(), Task.id.asc())
         result=await db.execute(query)
         tasks=result.scalars().all()
 
@@ -99,7 +104,7 @@ class TaskCRUD:
         query = select(Task).where(
             Task.event_id == event_id,
             Task.assignee_id == user_id
-        ).order_by(desc(Task.created_at))
+        ).order_by(Task.start_time.asc(), Task.id.asc())
 
         result = await db.execute(query)
         tasks = result.scalars().all()
@@ -114,7 +119,7 @@ class TaskCRUD:
         query = (
             select(Task)
             .where(Task.event_id.in_(event_ids))
-            .order_by(desc(Task.created_at))
+            .order_by(Task.start_time.asc(), Task.id.asc())
             .offset(skip)
             .limit(limit)
         )
@@ -405,14 +410,10 @@ class TaskCRUD:
             priority=priority,
             q=q,
         )
-        stmt = (
-            select(Task)
-            .order_by(desc(Task.created_at))
-            .offset(skip)
-            .limit(limit)
-        )
+        stmt = select(Task)
         if conditions:
             stmt = stmt.where(and_(*conditions))
+        stmt = stmt.order_by(Task.start_time.asc(), Task.id.asc()).offset(skip).limit(limit)
         result = await db.execute(stmt)
         tasks = result.scalars().all()
         for task in tasks:
