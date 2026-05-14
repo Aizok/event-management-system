@@ -619,6 +619,29 @@ function renderResources() {
   `);
 }
 
+/** Роли участника мероприятия в селекте добавления: только совместимые с системной ролью пользователя (см. event-service create_participant). */
+function eventParticipantRoleOptionsForSystemRole(systemRole) {
+  const r = String(systemRole || "viewer").toLowerCase();
+  let allowed;
+  if (r === "viewer") {
+    allowed = ["viewer"];
+  } else if (r === "executor") {
+    allowed = ["executor", "viewer"];
+  } else if (r === "organizer") {
+    allowed = ["organizer", "executor", "viewer"];
+  } else if (r === "admin") {
+    allowed = ["organizer", "executor", "viewer"];
+  } else {
+    allowed = ["viewer"];
+  }
+  return allowed
+    .map(
+      (role, i) =>
+        `<option value="${role}"${i === 0 ? " selected" : ""}>${enumLabel("participantRole", role)}</option>`
+    )
+    .join("");
+}
+
 function renderUsers() {
   const inParticipantMode = state.participantsModeEventId != null;
   const canManageParticipants = canCreate();
@@ -645,9 +668,7 @@ function renderUsers() {
       canManageParticipants
         ? `<div class="detail-actions">
             <select data-user-role-select="${user.id}">
-              <option value="organizer">${enumLabel("participantRole", "organizer")}</option>
-              <option value="executor">${enumLabel("participantRole", "executor")}</option>
-              <option value="viewer">${enumLabel("participantRole", "viewer")}</option>
+              ${eventParticipantRoleOptionsForSystemRole(user.role)}
             </select>
             <button class="btn btn-inline" type="button" data-add-participant-user="${user.id}">Добавить в мероприятие</button>
           </div>`
@@ -1263,6 +1284,8 @@ function collectEventLevelAllocations(eventResources) {
 function renderEventDetailCard(event, tasks, depMap, participants, participantProfiles, eventResources, ownerProfile) {
   const root = document.getElementById("event-detail-root");
   const canManage = canCreate();
+  const canRemoveEventParticipants =
+    state.profileId != null && Number(state.profileId) === Number(event.owner_id);
   const taskById = Object.fromEntries(tasks.map((t) => [t.id, t]));
   const tasksForList = sortTasksByPlannedStart(tasks);
 
@@ -1327,9 +1350,16 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
       ? '<p class="list-item-meta">Участников пока нет.</p>'
       : participants
           .map(
-            (participant) => `
+            (participant) => {
+              const showRemove =
+                canRemoveEventParticipants && Number(participant.user_id) !== Number(event.owner_id);
+              const removeBtn = showRemove
+                ? `<button type="button" class="btn btn-danger btn-inline" data-event-remove-participant="${participant.user_id}">Удалить</button>`
+                : "";
+              return `
         <article class="list-item">
-          <p class="list-item-title">
+          <p class="list-item-title event-detail-task-row">
+            <span class="event-detail-task-row-titleblock">
             <button type="button" class="entity-link" data-entity-link="user" data-id="${participant.user_id}">
               ${escapeHtml(
                 participantProfiles?.[participant.user_id]
@@ -1337,9 +1367,12 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
                   : `Пользователь #${participant.user_id}`
               )}
             </button>
+            </span>
+            ${removeBtn}
           </p>
           <p class="list-item-meta">Роль в мероприятии: ${enumLabel("participantRole", participant.role)}</p>
-        </article>`
+        </article>`;
+            }
           )
           .join("");
   const resourcesBlock =
@@ -1484,6 +1517,15 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
       document.getElementById("event-dep-add-btn")?.addEventListener("click", () => void onEventDepAdd(event.id));
     }
   }
+  if (canRemoveEventParticipants) {
+    root.querySelectorAll("[data-event-remove-participant]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        void onRemoveEventParticipant(event.id, Number(btn.dataset.eventRemoveParticipant));
+      });
+    });
+  }
   void renderEventDependencyMermaid(tasks, depMap);
 }
 
@@ -1530,6 +1572,19 @@ async function onEventDelete(eventId) {
     await refreshData();
   } catch (error) {
     notify(`Ошибка удаления: ${error.message}`, true);
+  }
+}
+
+async function onRemoveEventParticipant(eventId, participantUserId) {
+  if (!participantUserId) return;
+  if (!confirm("Удалить участника из мероприятия?")) return;
+  try {
+    await apiRequest(`${API.events}${eventId}/participants/${participantUserId}`, { method: "DELETE" });
+    notify("Участник удалён");
+    await openEventDetail(eventId);
+    await refreshData();
+  } catch (error) {
+    notify(`Ошибка удаления участника: ${error.message}`, true);
   }
 }
 
@@ -2618,6 +2673,7 @@ async function loadProfileCabinet() {
     setText("cabinet-view-phone", me.phone);
     setText("cabinet-view-speciality", me.speciality);
     setText("cabinet-view-bio", me.bio);
+    setText("cabinet-view-system-role", state.role ? enumLabel("participantRole", state.role) : "—");
     if (emailEl) {
       emailEl.textContent = me.email || state.email || "—";
     }
@@ -2632,6 +2688,8 @@ async function loadProfileCabinet() {
     }
   } catch (error) {
     if (emailEl) emailEl.textContent = state.email || "—";
+    const roleNode = document.getElementById("cabinet-view-system-role");
+    if (roleNode) roleNode.textContent = state.role ? enumLabel("participantRole", state.role) : "—";
     notify(`Не удалось загрузить профиль: ${error.message}`, true);
   }
 }

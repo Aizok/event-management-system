@@ -90,9 +90,16 @@ async def create_participant(
             detail="User already participant"
         )
 
+    target_auth_user_id = await get_auth_user_id_by_profile_id(participant_in.user_id)
+    auth_role = await get_user_role(target_auth_user_id)
+
+    if auth_role == "viewer" and participant_in.role != ParticipantRole.VIEWER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="System viewer can only be added with event role viewer",
+        )
+
     if participant_in.role == ParticipantRole.ORGANIZER:
-        auth_user_id = await get_auth_user_id_by_profile_id(participant_in.user_id)
-        auth_role = await get_user_role(auth_user_id)
         if auth_role == "executor":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
