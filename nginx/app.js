@@ -1223,6 +1223,43 @@ function sortTasksByPlannedStart(tasks) {
   });
 }
 
+/** Назначения ресурсов, привязанные к задаче (из кэша state.resources). */
+function collectAllocationsForTask(task) {
+  const out = [];
+  for (const r of state.resources || []) {
+    if (Number(r.event_id) !== Number(task.event_id)) continue;
+    for (const a of r.allocations || []) {
+      if (a.task_id != null && a.task_id !== "" && Number(a.task_id) === Number(task.id)) {
+        out.push({ alloc: a, resource: r });
+      }
+    }
+  }
+  out.sort((x, y) => {
+    const ta = new Date(x.alloc.date_start).getTime();
+    const tb = new Date(y.alloc.date_start).getTime();
+    return (Number.isFinite(ta) ? ta : 0) - (Number.isFinite(tb) ? tb : 0);
+  });
+  return out;
+}
+
+/** Назначения без привязки к задаче (уровень мероприятия). */
+function collectEventLevelAllocations(eventResources) {
+  const out = [];
+  for (const r of eventResources || []) {
+    for (const a of r.allocations || []) {
+      if (a.task_id == null || a.task_id === "") {
+        out.push({ alloc: a, resource: r });
+      }
+    }
+  }
+  out.sort((x, y) => {
+    const ta = new Date(x.alloc.date_start).getTime();
+    const tb = new Date(y.alloc.date_start).getTime();
+    return (Number.isFinite(ta) ? ta : 0) - (Number.isFinite(tb) ? tb : 0);
+  });
+  return out;
+}
+
 function renderEventDetailCard(event, tasks, depMap, participants, participantProfiles, eventResources, ownerProfile) {
   const root = document.getElementById("event-detail-root");
   const canManage = canCreate();
@@ -1266,6 +1303,25 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
           })
           .join("");
   const timelineBlock = buildEventTimeline(tasks, event);
+  const eventLevelAllocRows = collectEventLevelAllocations(eventResources);
+  const eventLevelAllocationsBlock =
+    eventLevelAllocRows.length === 0
+      ? '<p class="list-item-meta">Нет назначений уровня мероприятия (без привязки к задаче).</p>'
+      : eventLevelAllocRows
+          .map(
+            ({ alloc: a, resource: r }) => `
+        <article class="list-item">
+          <p class="list-item-title">
+            <button type="button" class="entity-link" data-entity-link="resource" data-id="${r.id}">
+              ${escapeHtml(r.name)}
+            </button>
+            <span class="badge">${enumLabel("resourceType", r.type)}</span>
+            <span class="badge">${enumLabel("allocationStatus", a.status)}</span>
+          </p>
+          <p class="list-item-meta">Количество: ${a.quantity_used} | ${formatDateTime(a.date_start)} — ${formatDateTime(a.date_end)}</p>
+        </article>`
+          )
+          .join("");
   const participantsBlock =
     !participants || participants.length === 0
       ? '<p class="list-item-meta">Участников пока нет.</p>'
@@ -1364,10 +1420,6 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
       ${participantsBlock}
     </div>
     <div class="panel">
-      <h3>Используемые ресурсы</h3>
-      ${resourcesBlock}
-    </div>
-    <div class="panel">
       <h3>Задачи и зависимости</h3>
       ${tasksBlock}
     </div>
@@ -1381,6 +1433,15 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
     <div class="panel">
       <h3>План задач (таймлайн)</h3>
       ${timelineBlock}
+    </div>
+    <div class="panel">
+      <h3>Используемые ресурсы</h3>
+      ${resourcesBlock}
+    </div>
+    <div class="panel">
+      <h3>Назначения ресурсов на мероприятие</h3>
+      <p class="list-item-meta">Назначения без привязки к задаче (уровень мероприятия).</p>
+      ${eventLevelAllocationsBlock}
     </div>
   `;
 
@@ -1515,7 +1576,8 @@ async function openTaskDetail(taskId, opts = {}) {
     const taskDetailMeta = {
       eventTitle,
       ownerProfile: profilesById[Number(task.owner_id)],
-      assigneeProfile: task.assignee_id != null ? profilesById[Number(task.assignee_id)] : null
+      assigneeProfile: task.assignee_id != null ? profilesById[Number(task.assignee_id)] : null,
+      taskAllocations: collectAllocationsForTask(task)
     };
     let dependsOn = [];
     let eventTasksForDeps = [];
@@ -1648,6 +1710,31 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
     </div>`;
   }
 
+  const taskAllocRows = Array.isArray(meta.taskAllocations) ? meta.taskAllocations : [];
+  const taskResourceAllocSection = `
+    <div class="panel">
+      <h3>Назначения ресурсов на задачу</h3>
+      ${
+        taskAllocRows.length === 0
+          ? '<p class="list-item-meta">Нет назначений ресурсов, привязанных к этой задаче.</p>'
+          : taskAllocRows
+              .map(
+                ({ alloc: a, resource: r }) => `
+        <article class="list-item">
+          <p class="list-item-title">
+            <button type="button" class="entity-link" data-entity-link="resource" data-id="${r.id}">
+              ${escapeHtml(r.name)}
+            </button>
+            <span class="badge">${enumLabel("resourceType", r.type)}</span>
+            <span class="badge">${enumLabel("allocationStatus", a.status)}</span>
+          </p>
+          <p class="list-item-meta">Количество: ${a.quantity_used} | ${formatDateTime(a.date_start)} — ${formatDateTime(a.date_end)}</p>
+        </article>`
+              )
+              .join("")
+      }
+    </div>`;
+
   root.innerHTML = `
     <div class="panel">
       <p class="list-item-meta">Мероприятие: <button type="button" class="entity-link" data-entity-link="event" data-id="${task.event_id}">${escapeHtml(eventTitle)}</button></p>
@@ -1662,6 +1749,7 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
       </dl>
       <p class="list-item-meta" style="margin-top:12px">${escapeHtml(task.description || "Без описания")}</p>
     </div>
+    ${taskResourceAllocSection}
     ${depsSection}
     ${editSection}
   `;
@@ -1931,8 +2019,8 @@ function renderResourceDetailCard(resource, meta = {}) {
                 : `<button type="button" class="entity-link" data-entity-link="task" data-id="${tid}" data-return-event="${resource.event_id}">${escapeHtml(titleFromMap || "Без названия")}</button>`;
             return `
     <article class="list-item">
-      <p class="list-item-title">Назначение #${a.id} <span class="badge">${enumLabel("allocationStatus", a.status)}</span></p>
-      <p class="list-item-meta">Задача: ${taskHtml} | ${new Date(a.date_start).toLocaleString()} — ${new Date(a.date_end).toLocaleString()}</p>
+      <p class="list-item-title"><span class="badge">${enumLabel("allocationStatus", a.status)}</span></p>
+      <p class="list-item-meta">Задача: ${taskHtml} | Количество: ${a.quantity_used} | ${formatDateTime(a.date_start)} — ${formatDateTime(a.date_end)}</p>
     </article>`;
           })
           .join("");
