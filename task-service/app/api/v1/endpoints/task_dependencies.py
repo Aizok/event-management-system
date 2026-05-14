@@ -61,6 +61,11 @@ async def create_dependency(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Dependency already exists"
             )
+        elif str(e) == "invalid_dependency_order":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Dependent task planned start must be on or after predecessor planned end",
+            )
 
 
 @router.get("/{task_id}/dependencies", response_model=List[TaskDependencyResponse])

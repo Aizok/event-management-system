@@ -13,6 +13,13 @@ class TaskDependencyCRUD:
         if await self.has_cycle(db, task_id, depends_on_task_id):
             raise ValueError("dependency_cycle")
 
+        from .task import task_crud
+
+        task = await task_crud.get(db, task_id)
+        parent = await task_crud.get(db, depends_on_task_id)
+        if task and parent and task.start_time < parent.end_time:
+            raise ValueError("invalid_dependency_order")
+
         db_obj=TaskDependency(
             task_id=task_id,
             depends_on_task_id=depends_on_task_id
