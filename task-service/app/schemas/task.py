@@ -40,6 +40,20 @@ class TaskAssigneeInvite(BaseModel):
     user_id: int = Field(..., gt=0)
 
 
+class TaskInvitationPreview(BaseModel):
+    id: int
+    title: str
+    description: Optional[str] = None
+    status: TaskStatus
+    priority: TaskPriority
+    start_time: datetime
+    end_time: datetime
+    deadline: datetime
+    event_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class TaskBase(BaseModel):
     title: str=Field(..., min_length=1, max_length=255)
     description: Optional[str] = None

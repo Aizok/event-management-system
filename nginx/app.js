@@ -277,7 +277,7 @@ function screenName(screenId) {
     tasks: "Задачи",
     resources: "Ресурсы",
     users: "Пользователи",
-    inbox: "Входящие",
+    inbox: "Приглашения",
     ai: "ИИ помощник",
     "profile-cabinet": "Профиль",
     "user-detail": "Пользователь"
@@ -674,6 +674,7 @@ async function loadInboxIncoming(root) {
           <div class="detail-actions" style="margin-top:8px">
             <button type="button" class="btn btn-primary btn-inline" data-inbox-accept-task="${tid}">Принять</button>
             <button type="button" class="btn btn-muted btn-inline" data-inbox-decline-task="${tid}">Отклонить</button>
+            <button type="button" class="btn btn-muted btn-inline" data-inbox-preview-task="${tid}">Подробнее</button>
           </div>
         </article>`);
     });
@@ -809,19 +810,81 @@ async function declineEventInvitation(eventId) {
   if (state.currentScreen === "inbox") await loadInbox();
 }
 
+function isTaskAccessDeniedError(error) {
+  const msg = String(error?.message || "").toLowerCase();
+  return (
+    msg.includes("403") ||
+    msg.includes("not enough permissions") ||
+    msg.includes("недостаточно прав")
+  );
+}
+
+async function openTaskInvitationPreview(taskId, opts = {}) {
+  if (opts.fromInbox) {
+    state.detailBackTarget = { kind: "inbox" };
+  }
+  state.detailView = "task-invitation";
+  state.detailEventId = null;
+  hideAllScreens();
+  document.getElementById("task-detail-screen").classList.remove("hidden");
+  el.screenTitle.textContent = "Приглашение на задачу";
+  updateTopbarActions();
+
+  const root = document.getElementById("task-detail-root");
+  root.innerHTML = '<p class="list-item-meta">Загрузка…</p>';
+
+  try {
+    const task = await apiRequest(`${API.tasks}${taskId}/invitation-preview`);
+    const eventTitle = getEventTitle(task.event_id) || `Мероприятие #${task.event_id}`;
+    el.screenTitle.textContent = task.title || `Задача #${taskId}`;
+    root.innerHTML = `
+      <div class="panel">
+        <p class="list-item-meta">Вас пригласили исполнить задачу. Ознакомьтесь с деталями и примите решение.</p>
+        <p class="list-item-meta">Мероприятие: ${escapeHtml(eventTitle)}</p>
+        <dl class="detail-dl">
+          <dt>Название</dt><dd>${escapeHtml(task.title)}</dd>
+          <dt>Статус</dt><dd>${enumLabel("taskStatus", task.status)}</dd>
+          <dt>Приоритет</dt><dd>${enumLabel("taskPriority", task.priority)}</dd>
+          <dt>Начало (план)</dt><dd>${formatDateTime(task.start_time)}</dd>
+          <dt>Окончание (план)</dt><dd>${formatDateTime(task.end_time)}</dd>
+          <dt>Дедлайн</dt><dd>${formatDateTime(task.deadline)}</dd>
+        </dl>
+        <p class="list-item-meta" style="margin-top:12px">${escapeHtml(task.description || "Без описания")}</p>
+        <div class="detail-actions" style="margin-top:16px">
+          <button type="button" class="btn btn-primary btn-inline" data-inbox-accept-task="${taskId}">Принять</button>
+          <button type="button" class="btn btn-muted btn-inline" data-inbox-decline-task="${taskId}">Отклонить</button>
+        </div>
+      </div>`;
+  } catch (error) {
+    notify(error.message, true);
+    await closeDetailView();
+  }
+}
+
 async function acceptTaskInvitation(taskId) {
   if (!state.profileId) return;
   await apiRequest(`${API.tasks}${taskId}/assignees/${state.profileId}/accept`, { method: "POST" });
   notify("Вы приняли приглашение на задачу");
+  if (state.detailView === "task-invitation") {
+    state.detailBackTarget = null;
+    state.detailView = null;
+    await refreshData();
+    await openTaskDetail(taskId);
+    return;
+  }
   await refreshData();
-  await loadInbox();
+  if (state.currentScreen === "inbox") await loadInbox();
 }
 
 async function declineTaskInvitation(taskId) {
   if (!state.profileId) return;
   await apiRequest(`${API.tasks}${taskId}/assignees/${state.profileId}/decline`, { method: "POST" });
   notify("Приглашение на задачу отклонено");
-  await loadInbox();
+  if (state.detailView === "task-invitation") {
+    await closeDetailView();
+    return;
+  }
+  if (state.currentScreen === "inbox") await loadInbox();
 }
 
 function populateResourceEventOptions(selectedEventId = null) {
@@ -1923,7 +1986,16 @@ async function openTaskDetail(taskId, opts = {}) {
   root.innerHTML = '<p class="list-item-meta">Загрузка…</p>';
 
   try {
-    const task = await apiRequest(`${API.tasks}${taskId}`);
+    let task;
+    try {
+      task = await apiRequest(`${API.tasks}${taskId}`);
+    } catch (error) {
+      if (isTaskAccessDeniedError(error)) {
+        await openTaskInvitationPreview(taskId);
+        return;
+      }
+      throw error;
+    }
     el.screenTitle.textContent = task.title || `Задача #${taskId}`;
     let eventRecord = null;
     try {
@@ -1933,8 +2005,19 @@ async function openTaskDetail(taskId, opts = {}) {
     }
     const eventTitle =
       eventRecord?.title?.trim() ? eventRecord.title : getEventTitle(task.event_id) || "Мероприятие";
+    const mode = taskDetailMode(task);
+    let eventParticipants = [];
+    if (canCreate() && mode === "full") {
+      try {
+        eventParticipants = await apiRequest(`${API.events}${task.event_id}/participants`);
+        if (!Array.isArray(eventParticipants)) eventParticipants = [];
+      } catch {
+        eventParticipants = [];
+      }
+    }
     const assigneeUserIds = (Array.isArray(task.assignees) ? task.assignees : []).map((a) => a.user_id);
-    const profileIds = [...new Set([task.owner_id, ...assigneeUserIds])].filter(
+    const participantUserIds = eventParticipants.map((p) => p.user_id);
+    const profileIds = [...new Set([task.owner_id, ...assigneeUserIds, ...participantUserIds])].filter(
       (id) => id != null && id !== ""
     );
     let profilesById = {};
@@ -1946,16 +2029,6 @@ async function openTaskDetail(taskId, opts = {}) {
         profilesById = Object.fromEntries((plist || []).map((p) => [Number(p.id), p]));
       } catch {
         profilesById = {};
-      }
-    }
-    const mode = taskDetailMode(task);
-    let eventParticipants = [];
-    if (canCreate() && mode === "full") {
-      try {
-        eventParticipants = await apiRequest(`${API.events}${task.event_id}/participants`);
-        if (!Array.isArray(eventParticipants)) eventParticipants = [];
-      } catch {
-        eventParticipants = [];
       }
     }
     const taskDetailMeta = {
@@ -2632,6 +2705,13 @@ function onProtectedClick(e) {
     e.preventDefault();
     const id = Number(previewEv.dataset.inboxPreviewEvent);
     if (!Number.isNaN(id)) void openEventInvitationPreview(id, { fromInbox: true });
+    return;
+  }
+  const previewTk = e.target.closest("[data-inbox-preview-task]");
+  if (previewTk) {
+    e.preventDefault();
+    const id = Number(previewTk.dataset.inboxPreviewTask);
+    if (!Number.isNaN(id)) void openTaskInvitationPreview(id, { fromInbox: true });
     return;
   }
   const leaveEv = e.target.closest("[data-event-leave-participant]");

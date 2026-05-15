@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.event_client import get_user_role_in_event
 from ..crud.task_assignee import task_assignee_crud
+from ..models.task_assignee import TaskAssigneeStatus
 
 ALLOWED_ROLES={"owner", "organizer"}
 
@@ -18,6 +19,17 @@ async def check_task_permissions(db: AsyncSession, task, user_id: int):
         status_code=status.HTTP_403_FORBIDDEN,
         detail="Not enough permissions"
     )
+
+
+async def check_task_invitation_preview_permissions(
+    db: AsyncSession, task_id: int, user_id: int
+):
+    row = await task_assignee_crud.get_row(db, task_id, user_id)
+    if row is None or row.status != TaskAssigneeStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions",
+        )
 
 
 async def check_task_manage_permissions(task, user_id: int):

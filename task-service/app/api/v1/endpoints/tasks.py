@@ -9,6 +9,7 @@ from ....schemas.task import (
     TaskCreate,
     TaskUpdate,
     TaskResponse,
+    TaskInvitationPreview,
     TokenData,
     TaskPage,
     TaskMetricsResponse,
@@ -16,7 +17,12 @@ from ....schemas.task import (
     TaskPriority,
 )
 from ....core.events import publish_task_created, publish_task_updated
-from ....core.permissions import check_task_permissions, ALLOWED_ROLES, check_task_manage_permissions
+from ....core.permissions import (
+    check_task_permissions,
+    ALLOWED_ROLES,
+    check_task_manage_permissions,
+    check_task_invitation_preview_permissions,
+)
 from ....core.event_client import get_user_events_with_roles
 from ....core.event_client import get_user_role_in_event
 
@@ -172,6 +178,21 @@ async def create_task_internal(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     await publish_task_created(db, task.id)
+    return task
+
+
+@router.get("/{task_id}/invitation-preview", response_model=TaskInvitationPreview)
+async def read_task_invitation_preview(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_profile_id),
+    user_data: TokenData = Depends(get_current_user_data),
+):
+    task = await task_crud.get(db, task_id)
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    if user_data.role != "admin":
+        await check_task_invitation_preview_permissions(db, task_id, user_id)
     return task
 
 
