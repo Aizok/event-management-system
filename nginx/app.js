@@ -10,8 +10,11 @@ const state = {
   detailBackTarget: null,
   taskCreatePresetEventId: null,
   resourceCreatePresetEventId: null,
-  usersSearch: { id: "", q: "", speciality: "" },
+  usersSearch: { id: "", q: "", speciality: "", role: "" },
   usersList: [],
+  usersTotal: 0,
+  usersSkip: 0,
+  usersLimit: 25,
   participantsModeEventId: null,
   allocationPreset: { eventId: null, taskId: null, resourceId: null },
   events: [],
@@ -346,7 +349,8 @@ function setScreen(screenId) {
   el.screenTitle.textContent = screenName(screenId);
   updateTopbarActions();
   if (screenId === "users") {
-    void loadUsers();
+    syncUsersFilterInputs();
+    void loadUsersPage();
   }
   if (screenId === "profile-cabinet") {
     void loadProfileCabinet();
@@ -710,11 +714,15 @@ async function loadInboxOutgoing(root) {
     blocks.push("<h3>Мероприятия</h3>");
     eventSent.forEach((row) => {
       const uid = Number(row.invitee_user_id);
+      const eid = Number(row.event_id);
       blocks.push(`
         <article class="list-item">
-          <p class="list-item-title">${escapeHtml(row.event_title || `Мероприятие #${row.event_id}`)}</p>
+          <p class="list-item-title">${escapeHtml(row.event_title || `Мероприятие #${eid}`)}</p>
           <p class="list-item-meta">Кому: ${escapeHtml(names[uid] || `Пользователь #${uid}`)} | Роль: ${enumLabel("participantRole", row.role)}</p>
           <p class="list-item-meta">Статус: ожидает ответа</p>
+          <div class="detail-actions">
+            <button type="button" class="btn btn-muted btn-inline" data-inbox-cancel-event-invitation="${eid}" data-inbox-cancel-event-user="${uid}">Отменить</button>
+          </div>
         </article>`);
     });
   }
@@ -722,11 +730,15 @@ async function loadInboxOutgoing(root) {
     blocks.push("<h3 style=\"margin-top:16px\">Задачи</h3>");
     taskSent.forEach((row) => {
       const uid = Number(row.invitee_user_id);
+      const tid = Number(row.task_id);
       blocks.push(`
         <article class="list-item">
-          <p class="list-item-title">${escapeHtml(row.title || `Задача #${row.task_id}`)}</p>
+          <p class="list-item-title">${escapeHtml(row.title || `Задача #${tid}`)}</p>
           <p class="list-item-meta">Кому: ${escapeHtml(names[uid] || `Пользователь #${uid}`)} | Мероприятие #${row.event_id}</p>
           <p class="list-item-meta">Статус: ожидает ответа</p>
+          <div class="detail-actions">
+            <button type="button" class="btn btn-muted btn-inline" data-inbox-cancel-task-invitation="${tid}" data-inbox-cancel-task-user="${uid}">Отменить</button>
+          </div>
         </article>`);
     });
   }
@@ -798,6 +810,28 @@ async function acceptEventInvitation(eventId) {
   }
   await refreshData();
   if (state.currentScreen === "inbox") await loadInbox();
+}
+
+async function cancelSentEventInvitation(eventId, inviteeUserId) {
+  if (!confirm("Отменить отправленное приглашение в мероприятие?")) return;
+  try {
+    await apiRequest(`${API.events}${eventId}/invitations/${inviteeUserId}`, { method: "DELETE" });
+    notify("Приглашение отменено");
+    await loadInbox();
+  } catch (error) {
+    notify(`Ошибка: ${error.message}`, true);
+  }
+}
+
+async function cancelSentTaskInvitation(taskId, inviteeUserId) {
+  if (!confirm("Отменить отправленное приглашение на задачу?")) return;
+  try {
+    await apiRequest(`${API.tasks}${taskId}/assignees/${inviteeUserId}`, { method: "DELETE" });
+    notify("Приглашение отменено");
+    await loadInbox();
+  } catch (error) {
+    notify(`Ошибка: ${error.message}`, true);
+  }
 }
 
 async function declineEventInvitation(eventId) {
@@ -1320,33 +1354,71 @@ async function refreshData() {
   notify("Данные обновлены");
 }
 
-async function loadUsers() {
+function buildUsersListQueryString() {
+  const p = new URLSearchParams();
+  p.set("skip", String(state.usersSkip));
+  p.set("limit", String(state.usersLimit));
+  const s = state.usersSearch;
+  if (s.id) p.set("id", String(s.id));
+  if (s.q) p.set("q", String(s.q).trim());
+  if (s.speciality) p.set("speciality", String(s.speciality).trim());
+  if (s.role) p.set("role", String(s.role));
+  return p.toString();
+}
+
+function updateUsersPageControls() {
+  const info = document.getElementById("users-page-info");
+  if (info) {
+    const pages = Math.max(1, Math.ceil((state.usersTotal || 0) / (state.usersLimit || 1)) || 1);
+    const page = Math.min(pages, Math.floor(state.usersSkip / (state.usersLimit || 1)) + 1);
+    info.textContent = `Страница ${page} из ${pages} (всего: ${state.usersTotal})`;
+  }
+  const prev = document.getElementById("users-page-prev");
+  const next = document.getElementById("users-page-next");
+  if (prev) prev.disabled = state.usersSkip <= 0;
+  if (next) next.disabled = state.usersSkip + state.usersLimit >= state.usersTotal;
+}
+
+function syncUsersFilterInputs() {
+  const idEl = document.getElementById("users-search-id");
+  if (idEl) idEl.value = state.usersSearch.id || "";
+  const qEl = document.getElementById("users-search-q");
+  if (qEl) qEl.value = state.usersSearch.q || "";
+  const spEl = document.getElementById("users-search-speciality");
+  if (spEl) spEl.value = state.usersSearch.speciality || "";
+  const roleEl = document.getElementById("users-filter-role");
+  if (roleEl) roleEl.value = state.usersSearch.role || "";
+  const ps = document.getElementById("users-page-size");
+  if (ps) ps.value = String(state.usersLimit);
+}
+
+async function loadUsersPage(options = {}) {
+  const { resetPage = false } = options;
   if (!state.token) return;
-  const params = new URLSearchParams();
-  if (state.usersSearch.id) params.set("id", state.usersSearch.id);
-  if (state.usersSearch.q) params.set("q", state.usersSearch.q);
-  if (state.usersSearch.speciality) params.set("speciality", state.usersSearch.speciality);
+  if (resetPage) state.usersSkip = 0;
+  const qs = buildUsersListQueryString();
   try {
-    const list =
+    const data =
       state.role === "admin"
-        ? await apiRequest(`${API.users}/?${params.toString()}`)
-        : await apiRequest(`${API.users}/public?${params.toString()}`);
-    state.usersList = Array.isArray(list) ? list : [];
-    if (state.role !== "admin") {
-      state.usersList = state.usersList.filter((item) => item.role !== "admin");
-    }
-    if (state.usersSearch.id) {
-      const wantedId = Number(state.usersSearch.id);
-      state.usersList = state.usersList.filter((item) => item.id === wantedId);
-    }
+        ? await apiRequest(`${API.users}/?${qs}`)
+        : await apiRequest(`${API.users}/public/page?${qs}`);
+    const items = Array.isArray(data?.items) ? data.items : [];
+    const total = typeof data?.total === "number" ? data.total : items.length;
+    state.usersList = items;
+    state.usersTotal = total;
     populateUsersAddEventOptions(state.participantsModeEventId);
     if (el.usersAddEventSelect) {
       el.usersAddEventSelect.value = state.participantsModeEventId ? String(state.participantsModeEventId) : "";
     }
+    updateUsersPageControls();
     renderUsers();
   } catch (error) {
     notify(`Ошибка загрузки пользователей: ${error.message}`, true);
   }
+}
+
+async function loadUsers() {
+  await loadUsersPage();
 }
 
 async function closeDetailView() {
@@ -1772,6 +1844,10 @@ function renderEventDetailCard(
     </div>`
     : "";
 
+  const canDeleteEvent =
+    state.role === "admin" ||
+    (state.profileId != null && Number(state.profileId) === Number(event.owner_id));
+
   const editSection = canManage
     ? `
     <div class="panel">
@@ -1802,9 +1878,17 @@ function renderEventDetailCard(
           <button class="btn btn-primary" type="submit">Сохранить</button>
         </form>
         <div class="detail-actions" style="margin-top:12px">
-          <button type="button" class="btn btn-danger" id="event-delete-btn">Удалить мероприятие</button>
           <button type="button" class="btn btn-muted btn-inline" id="event-cancel-edit-btn">Отмена</button>
         </div>
+      </div>
+    </div>`
+    : "";
+
+  const deleteSection = canDeleteEvent
+    ? `
+    <div class="panel">
+      <div class="detail-actions">
+        <button type="button" class="btn btn-danger" id="event-delete-btn">Удалить мероприятие</button>
       </div>
     </div>`
     : "";
@@ -1828,6 +1912,7 @@ function renderEventDetailCard(
     </div>
     ${leaveSection}
     ${editSection}
+    ${deleteSection}
     <div class="panel">
       <h3>Участники мероприятия</h3>
       ${participantsBlock}
@@ -1879,7 +1964,6 @@ function renderEventDetailCard(
       document.getElementById("event-edit-section").classList.add("hidden");
     });
     document.getElementById("event-edit-form").addEventListener("submit", (e) => onEventEditSubmit(e, event.id));
-    document.getElementById("event-delete-btn").addEventListener("click", () => onEventDelete(event.id));
 
     root.querySelectorAll("[data-event-task-delete]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
@@ -1896,6 +1980,9 @@ function renderEventDetailCard(
       syncEventDepPredecessorOptions(tasks, depMap);
       document.getElementById("event-dep-add-btn")?.addEventListener("click", () => void onEventDepAdd(event.id));
     }
+  }
+  if (canDeleteEvent) {
+    document.getElementById("event-delete-btn").addEventListener("click", () => onEventDelete(event.id));
   }
   if (canRemoveEventParticipants) {
     root.querySelectorAll("[data-event-remove-participant]").forEach((btn) => {
@@ -2749,6 +2836,26 @@ function onProtectedClick(e) {
     if (!Number.isNaN(id)) void declineTaskInvitation(id);
     return;
   }
+  const cancelEv = e.target.closest("[data-inbox-cancel-event-invitation]");
+  if (cancelEv) {
+    e.preventDefault();
+    const eventId = Number(cancelEv.dataset.inboxCancelEventInvitation);
+    const userId = Number(cancelEv.dataset.inboxCancelEventUser);
+    if (!Number.isNaN(eventId) && !Number.isNaN(userId)) {
+      void cancelSentEventInvitation(eventId, userId);
+    }
+    return;
+  }
+  const cancelTk = e.target.closest("[data-inbox-cancel-task-invitation]");
+  if (cancelTk) {
+    e.preventDefault();
+    const taskId = Number(cancelTk.dataset.inboxCancelTaskInvitation);
+    const userId = Number(cancelTk.dataset.inboxCancelTaskUser);
+    if (!Number.isNaN(taskId) && !Number.isNaN(userId)) {
+      void cancelSentTaskInvitation(taskId, userId);
+    }
+    return;
+  }
   const t = e.target.closest("[data-entity-link]");
   if (!t) return;
   const kind = t.dataset.entityLink;
@@ -2890,7 +2997,8 @@ async function onUsersSearchSubmit(event) {
   state.usersSearch.id = (payload.id || "").trim();
   state.usersSearch.q = (payload.q || "").trim();
   state.usersSearch.speciality = (payload.speciality || "").trim();
-  await loadUsers();
+  state.usersSearch.role = (payload.role || "").trim();
+  await loadUsersPage({ resetPage: true });
 }
 
 async function onUsersListClick(event) {
@@ -3431,6 +3539,30 @@ function bindEvents() {
   document.getElementById("users-search-form").addEventListener("submit", (e) => {
     void onUsersSearchSubmit(e);
   });
+  const usersPrev = document.getElementById("users-page-prev");
+  if (usersPrev) {
+    usersPrev.addEventListener("click", () => {
+      state.usersSkip = Math.max(0, state.usersSkip - state.usersLimit);
+      void loadUsersPage();
+    });
+  }
+  const usersNext = document.getElementById("users-page-next");
+  if (usersNext) {
+    usersNext.addEventListener("click", () => {
+      if (state.usersSkip + state.usersLimit < state.usersTotal) {
+        state.usersSkip += state.usersLimit;
+        void loadUsersPage();
+      }
+    });
+  }
+  const usersPageSize = document.getElementById("users-page-size");
+  if (usersPageSize) {
+    usersPageSize.addEventListener("change", (e) => {
+      state.usersLimit = Math.min(100, Math.max(1, Number(e.target.value) || 25));
+      state.usersSkip = 0;
+      void loadUsersPage();
+    });
+  }
   document.getElementById("allocation-form").addEventListener("submit", (e) => {
     void onAllocationCreate(e);
   });
@@ -3451,6 +3583,8 @@ function bindEvents() {
     state.taskMetrics = { total: 0, overdue: 0 };
     state.resources = [];
     state.usersList = [];
+    state.usersTotal = 0;
+    state.usersSkip = 0;
     renderEvents();
     renderTasks();
     renderResources();

@@ -74,6 +74,25 @@ async def get_service_token(req: ServiceTokenRequest):
     }
 
 
+@router.get("/internal/user-ids")
+async def list_user_ids_internal(
+    role: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    service: TokenData = Depends(get_current_service),
+):
+    _ = service
+    if role:
+        try:
+            UserRole(role)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid role",
+            )
+    ids = await auth_crud.list_user_ids(db, role=role)
+    return {"ids": ids}
+
+
 @router.get("/internal/users/{user_id}")
 async def get_user_internal(
     user_id: int,

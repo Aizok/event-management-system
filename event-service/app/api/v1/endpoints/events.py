@@ -7,6 +7,7 @@ from ....crud.event import event_crud
 from ....schemas.event import EventCreate, EventUpdate, EventResponse, TokenData
 from ....core.permissions import (
     check_event_permissions,
+    check_event_delete_permissions,
     ALLOWED_ROLES,
     check_event_read_permissions,
     check_event_preview_permissions,
@@ -162,7 +163,9 @@ async def delete_event(
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
     if user_data.role != "admin":
-        await check_event_permissions(db, event.id, user_id)
-    success = await event_crud.delete(db, event_id)
+        check_event_delete_permissions(event, user_id, user_data.role)
+        success = await event_crud.delete(db, event_id, owner_id=event.owner_id)
+    else:
+        success = await event_crud.delete(db, event_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")

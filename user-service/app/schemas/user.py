@@ -49,6 +49,16 @@ class UserPublicWithRoleResponse(UserPublicResponse):
     role: Optional[str] = None
 
 
+class UserPage(BaseModel):
+    items: list[UserPublicWithRoleResponse]
+    total: int
+
+
+class UserAdminPage(BaseModel):
+    items: list[UserResponse]
+    total: int
+
+
 class TokenRole(str, enum.Enum):
     ADMIN = "admin"
     ORGANIZER = "organizer"

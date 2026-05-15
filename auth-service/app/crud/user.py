@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from typing import Optional, List
 from datetime import datetime
-from ..models.user import User, UserStatus
+from ..models.user import User, UserStatus, UserRole
 from ..schemas.user import UserCreate, UserUpdate
 from ..core.security import get_password_hash
 
@@ -26,6 +26,20 @@ class AuthCRUD:
             select(User).offset(skip).limit(limit)
         )
         return result.scalars().all()
+
+    async def list_user_ids(self, db: AsyncSession, role: Optional[str] = None) -> List[int]:
+        query = select(User.id)
+        if role:
+            query = query.where(User.role == UserRole(role))
+        result = await db.execute(query.order_by(User.id))
+        return list(result.scalars().all())
+
+    async def count_users(self, db: AsyncSession, role: Optional[str] = None) -> int:
+        query = select(func.count()).select_from(User)
+        if role:
+            query = query.where(User.role == UserRole(role))
+        result = await db.execute(query)
+        return int(result.scalar_one())
 
     async def create(self, db: AsyncSession, user_in: UserCreate) -> User:
         db_user=User(

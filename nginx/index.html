@@ -255,8 +255,29 @@
             <input name="id" id="users-search-id" type="number" min="1" placeholder="Поиск по ID профиля">
             <input name="q" id="users-search-q" placeholder="Поиск по имени и фамилии">
             <input name="speciality" id="users-search-speciality" placeholder="Поиск по специализации">
+            <label>Системная роль
+              <select name="role" id="users-filter-role">
+                <option value="">Все</option>
+                <option value="admin">admin</option>
+                <option value="organizer">organizer</option>
+                <option value="executor">executor</option>
+                <option value="viewer">viewer</option>
+              </select>
+            </label>
             <button class="btn btn-inline" type="submit">Найти</button>
           </form>
+          <div class="detail-actions tasks-pagination" style="margin-top:12px;flex-wrap:wrap;align-items:center">
+            <span id="users-page-info" class="list-item-meta"></span>
+            <button type="button" class="btn btn-muted" id="users-page-prev">Назад</button>
+            <button type="button" class="btn btn-muted" id="users-page-next">Вперёд</button>
+            <label class="tasks-page-size-label">На странице
+              <select id="users-page-size">
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+          </div>
           <div id="users-add-controls" class="detail-actions" style="margin-top:10px">
             <select id="users-add-event-select">
               <option value="">Выберите мероприятие для добавления</option>

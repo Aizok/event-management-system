@@ -158,5 +158,17 @@ class EventParticipantCRUD:
         await db.commit()
         return result.rowcount > 0
 
+    async def cancel_pending_invitation(
+        self, db: AsyncSession, event_id: int, invitee_user_id: int
+    ) -> bool:
+        query = delete(EventParticipant).where(
+            EventParticipant.event_id == event_id,
+            EventParticipant.user_id == invitee_user_id,
+            EventParticipant.membership_status == MembershipStatus.PENDING,
+        )
+        result = await db.execute(query)
+        await db.commit()
+        return result.rowcount > 0
+
 
 event_participant_crud = EventParticipantCRUD()

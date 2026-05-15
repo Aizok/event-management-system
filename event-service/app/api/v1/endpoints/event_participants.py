@@ -321,6 +321,48 @@ async def get_participants(
     return await event_participant_crud.get_participants_by_event(db, event_id)
 
 
+@router.delete(
+    "/{event_id}/invitations/{invitee_user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def cancel_event_invitation(
+    event_id: int,
+    invitee_user_id: int,
+    db: AsyncSession = Depends(get_db),
+    auth_user_id: int = Depends(get_current_user_id),
+    token_data: TokenData = Depends(get_current_user_data),
+):
+    event = await event_crud.get(db, event_id)
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found",
+        )
+
+    current_profile_id = await get_user_profile_id(auth_user_id)
+    if token_data.role != "admin":
+        current_participant = await event_participant_crud.get_active_participant(
+            db, event_id, current_profile_id
+        )
+        if not current_participant or current_participant.role not in {
+            ParticipantRole.OWNER,
+            ParticipantRole.ORGANIZER,
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions",
+            )
+
+    success = await event_participant_crud.cancel_pending_invitation(
+        db, event_id, invitee_user_id
+    )
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pending invitation not found",
+        )
+
+
 @router.delete("/{event_id}/participants/{participant_user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_participant(
         participant_user_id: int,

@@ -31,6 +31,16 @@ async def check_event_permissions(db, event_id: int, user_id: int):
         )
 
 
+def check_event_delete_permissions(event, user_id: int, token_role: TokenRole) -> None:
+    if token_role == TokenRole.ADMIN:
+        return
+    if user_id != event.owner_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the event owner can delete this event",
+        )
+
+
 async def check_event_read_permissions(db, event_id: int, user_id: int):
     await check_event_preview_permissions(db, event_id, user_id)
 

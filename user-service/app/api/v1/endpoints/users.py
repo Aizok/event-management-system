@@ -8,14 +8,46 @@ from ....core.security import get_current_user_id, get_current_admin, get_curren
 from ....core.database import get_db
 from ....core.config import settings
 from ....crud.user import user_crud
-from ....schemas.user import UserCreate, UserResponse, UserPublicResponse, UserPublicWithRoleResponse, UserUpdate, TokenData, TokenRole
-from ....core.auth_client import get_user_email_from_auth, get_user_role_from_auth
+from ....schemas.user import (
+    UserCreate,
+    UserResponse,
+    UserPublicWithRoleResponse,
+    UserUpdate,
+    TokenData,
+    TokenRole,
+    UserPage,
+    UserAdminPage,
+)
+from ....core.auth_client import (
+    get_user_email_from_auth,
+    get_user_role_from_auth,
+    get_auth_user_ids_by_role,
+)
 
 from fastapi.security import OAuth2PasswordBearer
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 router=APIRouter()
+
+
+async def _resolve_user_list_filters(
+    token_data: TokenData,
+    role: str | None,
+) -> tuple[list[int] | None, list[int] | None]:
+    auth_user_ids: list[int] | None = None
+    if role:
+        auth_user_ids = await get_auth_user_ids_by_role(role)
+        if not auth_user_ids:
+            return [], []
+
+    exclude_auth_user_ids: list[int] | None = None
+    if token_data.role != TokenRole.ADMIN:
+        admin_ids = await get_auth_user_ids_by_role("admin")
+        if admin_ids:
+            exclude_auth_user_ids = admin_ids
+    return auth_user_ids, exclude_auth_user_ids
+
 
 class ServiceTokenRequest(BaseModel):
     service_name: str
@@ -65,21 +97,43 @@ async def create_user_profile(
     return user
 
 
-@router.get("/", response_model=List[UserResponse])
+@router.get("/", response_model=UserAdminPage)
 async def read_user_profiles(
         skip: int=0,
         limit: int=100,
         q: str | None = None,
         speciality: str | None = None,
+        role: str | None = None,
+        id: int | None = None,
         db: AsyncSession=Depends(get_db),
-        admin_data: TokenData = Depends(get_current_admin)
-        #admin_data Только для проверки роли
+        admin_data: TokenData = Depends(get_current_admin),
 ):
     _ = admin_data
-    users = await user_crud.search_public(db, q=q, speciality=speciality, skip=skip, limit=limit)
+    auth_user_ids, exclude_auth_user_ids = await _resolve_user_list_filters(admin_data, role)
+    if auth_user_ids == []:
+        return UserAdminPage(items=[], total=0)
+
+    total = await user_crud.count_search_public(
+        db,
+        q=q,
+        speciality=speciality,
+        profile_id=id,
+        auth_user_ids=auth_user_ids,
+        exclude_auth_user_ids=exclude_auth_user_ids,
+    )
+    users = await user_crud.search_public(
+        db,
+        q=q,
+        speciality=speciality,
+        skip=skip,
+        limit=limit,
+        profile_id=id,
+        auth_user_ids=auth_user_ids,
+        exclude_auth_user_ids=exclude_auth_user_ids,
+    )
     output: list[UserResponse] = []
     for user in users:
-        role = await get_user_role_from_auth(user.auth_user_id)
+        user_role = await get_user_role_from_auth(user.auth_user_id)
         output.append(
             UserResponse(
                 id=user.id,
@@ -90,12 +144,12 @@ async def read_user_profiles(
                 phone=user.phone,
                 speciality=user.speciality,
                 bio=user.bio,
-                role=role,
+                role=user_role,
                 created_at=user.created_at,
-                updated_at=user.updated_at
+                updated_at=user.updated_at,
             )
         )
-    return output
+    return UserAdminPage(items=output, total=total)
 
 
 @router.get("/internal/{user_id}")
@@ -221,6 +275,54 @@ async def read_public_profiles_by_ids(
     return output
 
 
+@router.get("/public/page", response_model=UserPage)
+async def read_public_profiles_page(
+        q: str | None = None,
+        speciality: str | None = None,
+        role: str | None = None,
+        id: int | None = None,
+        skip: int = 0,
+        limit: int = 100,
+        db: AsyncSession = Depends(get_db),
+        token_data: TokenData = Depends(get_current_user_data),
+):
+    auth_user_ids, exclude_auth_user_ids = await _resolve_user_list_filters(token_data, role)
+    if auth_user_ids == []:
+        return UserPage(items=[], total=0)
+
+    total = await user_crud.count_search_public(
+        db,
+        q=q,
+        speciality=speciality,
+        profile_id=id,
+        auth_user_ids=auth_user_ids,
+        exclude_auth_user_ids=exclude_auth_user_ids,
+    )
+    profiles = await user_crud.search_public(
+        db,
+        q=q,
+        speciality=speciality,
+        skip=skip,
+        limit=limit,
+        profile_id=id,
+        auth_user_ids=auth_user_ids,
+        exclude_auth_user_ids=exclude_auth_user_ids,
+    )
+    output: list[UserPublicWithRoleResponse] = []
+    for profile in profiles:
+        profile_role = await get_user_role_from_auth(profile.auth_user_id)
+        output.append(
+            UserPublicWithRoleResponse(
+                id=profile.id,
+                first_name=profile.first_name,
+                last_name=profile.last_name,
+                speciality=profile.speciality,
+                role=profile_role,
+            )
+        )
+    return UserPage(items=output, total=total)
+
+
 @router.get("/public", response_model=List[UserPublicWithRoleResponse])
 async def read_public_profiles(
         q: str | None = None,
@@ -228,24 +330,17 @@ async def read_public_profiles(
         skip: int = 0,
         limit: int = 100,
         db: AsyncSession = Depends(get_db),
-        token_data: TokenData = Depends(get_current_user_data)
+        token_data: TokenData = Depends(get_current_user_data),
 ):
-    profiles = await user_crud.search_public(db, q=q, speciality=speciality, skip=skip, limit=limit)
-    output: list[UserPublicWithRoleResponse] = []
-    for profile in profiles:
-        role = await get_user_role_from_auth(profile.auth_user_id)
-        if token_data.role != "admin" and role == "admin":
-            continue
-        output.append(
-            UserPublicWithRoleResponse(
-                id=profile.id,
-                first_name=profile.first_name,
-                last_name=profile.last_name,
-                speciality=profile.speciality,
-                role=role
-            )
-        )
-    return output
+    page = await read_public_profiles_page(
+        q=q,
+        speciality=speciality,
+        skip=skip,
+        limit=limit,
+        db=db,
+        token_data=token_data,
+    )
+    return page.items
 
 
 @router.get("/{user_id}", response_model=Union[UserResponse, UserPublicWithRoleResponse])
