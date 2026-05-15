@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ....core.database import get_db
 from ....core.security import get_current_profile_id, get_current_user_data
 from ....core.permissions import ALLOWED_ROLES, check_task_permissions
-from ....core.event_client import get_user_role_in_event
+from ....core.event_client import get_user_role_in_event, get_event_title
 from ....crud.task import task_crud
 from ....crud.task_assignee import task_assignee_crud
 from ....schemas.task import (
@@ -20,22 +20,34 @@ from ....core.events import publish_task_assignee_invited, publish_task_assigned
 router = APIRouter()
 
 
+async def _event_title_cached(event_id: int, cache: dict[int, str]) -> str:
+    if event_id not in cache:
+        title = await get_event_title(event_id)
+        cache[event_id] = title or f"Мероприятие #{event_id}"
+    return cache[event_id]
+
+
 @router.get("/invitations/me", response_model=list[TaskAssigneeInvitationItem])
 async def list_my_task_invitations(
     db: AsyncSession = Depends(get_db),
     profile_id: int = Depends(get_current_profile_id),
 ):
     rows = await task_assignee_crud.list_pending_invitations_for_user(db, profile_id)
-    return [
-        TaskAssigneeInvitationItem(
-            task_id=ta.task_id,
-            event_id=task.event_id,
-            title=task.title,
-            invited_by=ta.invited_by,
-            created_at=ta.created_at,
+    title_cache: dict[int, str] = {}
+    result = []
+    for ta, task in rows:
+        event_title = await _event_title_cached(task.event_id, title_cache)
+        result.append(
+            TaskAssigneeInvitationItem(
+                task_id=ta.task_id,
+                event_id=task.event_id,
+                event_title=event_title,
+                title=task.title,
+                invited_by=ta.invited_by,
+                created_at=ta.created_at,
+            )
         )
-        for ta, task in rows
-    ]
+    return result
 
 
 @router.get("/invitations/sent/me", response_model=list[TaskSentInvitationItem])
@@ -44,16 +56,21 @@ async def list_my_sent_task_invitations(
     profile_id: int = Depends(get_current_profile_id),
 ):
     rows = await task_assignee_crud.list_sent_pending_invitations_for_user(db, profile_id)
-    return [
-        TaskSentInvitationItem(
-            task_id=ta.task_id,
-            event_id=task.event_id,
-            title=task.title,
-            invitee_user_id=ta.user_id,
-            created_at=ta.created_at,
+    title_cache: dict[int, str] = {}
+    result = []
+    for ta, task in rows:
+        event_title = await _event_title_cached(task.event_id, title_cache)
+        result.append(
+            TaskSentInvitationItem(
+                task_id=ta.task_id,
+                event_id=task.event_id,
+                event_title=event_title,
+                title=task.title,
+                invitee_user_id=ta.user_id,
+                created_at=ta.created_at,
+            )
         )
-        for ta, task in rows
-    ]
+    return result
 
 
 async def _can_manage_assignees(

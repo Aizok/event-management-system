@@ -35,6 +35,26 @@ async def get_user_role_in_event(event_id: int, user_id: int)-> Optional[str]:
             )
 
 
+async def get_event_title(event_id: int) -> Optional[str]:
+    async with httpx.AsyncClient() as client:
+        try:
+            token = await get_service_token()
+            url = f"http://event-service:8002/api/events/internal/events/{event_id}"
+            resp = await client.get(
+                url,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if resp.status_code == status.HTTP_404_NOT_FOUND:
+                return None
+            if resp.status_code != status.HTTP_200_OK:
+                logger.error(f"Event title fetch failed: {resp.status_code} {resp.text}")
+                return None
+            return resp.json().get("title")
+        except Exception as e:
+            logger.error(f"Error fetching event title: {e}")
+            return None
+
+
 async def get_user_events_with_roles(user_id: int) -> List[Dict]:
     async with httpx.AsyncClient() as client:
         try:

@@ -97,6 +97,20 @@ function userProfileLinkButton(userId, profile) {
   return `<button type="button" class="entity-link" data-entity-link="user" data-id="${userId}">${escapeHtml(label)}</button>`;
 }
 
+function userEntityLinkFromName(userId, displayName) {
+  const uid = Number(userId);
+  if (Number.isNaN(uid)) return "—";
+  const label = (displayName || "").trim() || `Пользователь #${uid}`;
+  return `<button type="button" class="entity-link" data-entity-link="user" data-id="${uid}">${escapeHtml(label)}</button>`;
+}
+
+function eventEntityLink(eventId, title) {
+  const eid = Number(eventId);
+  if (Number.isNaN(eid)) return "—";
+  const label = (title || "").trim() || getEventTitle(eid) || `Мероприятие #${eid}`;
+  return `<button type="button" class="entity-link" data-entity-link="event" data-id="${eid}">${escapeHtml(label)}</button>`;
+}
+
 const enumLabels = {
   eventStatus: {
     draft: "Черновик",
@@ -642,6 +656,9 @@ async function loadInboxIncoming(root) {
     root.innerHTML = '<p class="list-item-meta">Нет ожидающих приглашений.</p>';
     return;
   }
+  const taskInviterNames = await resolveProfileNames(
+    taskInv.map((r) => r.invited_by).filter((id) => id != null && id !== "")
+  );
   const blocks = [];
   if (eventInv.length) {
     blocks.push("<h3>Мероприятия</h3>");
@@ -671,10 +688,17 @@ async function loadInboxIncoming(root) {
     blocks.push("<h3 style=\"margin-top:16px\">Задачи</h3>");
     taskInv.forEach((row) => {
       const tid = Number(row.task_id);
+      const eid = Number(row.event_id);
+      const inviterId = row.invited_by != null ? Number(row.invited_by) : null;
+      const inviterLine =
+        inviterId != null && !Number.isNaN(inviterId)
+          ? `<p class="list-item-meta">Пригласил: ${userEntityLinkFromName(inviterId, taskInviterNames[inviterId])}</p>`
+          : "";
       blocks.push(`
         <article class="list-item">
           <p class="list-item-title">${escapeHtml(row.title || `Задача #${tid}`)}</p>
-          <p class="list-item-meta">Мероприятие #${row.event_id}</p>
+          <p class="list-item-meta">Мероприятие: ${eventEntityLink(eid, row.event_title)}</p>
+          ${inviterLine}
           <div class="detail-actions" style="margin-top:8px">
             <button type="button" class="btn btn-primary btn-inline" data-inbox-accept-task="${tid}">Принять</button>
             <button type="button" class="btn btn-muted btn-inline" data-inbox-decline-task="${tid}">Отклонить</button>
@@ -717,8 +741,8 @@ async function loadInboxOutgoing(root) {
       const eid = Number(row.event_id);
       blocks.push(`
         <article class="list-item">
-          <p class="list-item-title">${escapeHtml(row.event_title || `Мероприятие #${eid}`)}</p>
-          <p class="list-item-meta">Кому: ${escapeHtml(names[uid] || `Пользователь #${uid}`)} | Роль: ${enumLabel("participantRole", row.role)}</p>
+          <p class="list-item-title">${eventEntityLink(eid, row.event_title)}</p>
+          <p class="list-item-meta">Кому: ${userEntityLinkFromName(uid, names[uid])} | Роль: ${enumLabel("participantRole", row.role)}</p>
           <p class="list-item-meta">Статус: ожидает ответа</p>
           <div class="detail-actions">
             <button type="button" class="btn btn-muted btn-inline" data-inbox-cancel-event-invitation="${eid}" data-inbox-cancel-event-user="${uid}">Отменить</button>
@@ -731,10 +755,11 @@ async function loadInboxOutgoing(root) {
     taskSent.forEach((row) => {
       const uid = Number(row.invitee_user_id);
       const tid = Number(row.task_id);
+      const eid = Number(row.event_id);
       blocks.push(`
         <article class="list-item">
           <p class="list-item-title">${escapeHtml(row.title || `Задача #${tid}`)}</p>
-          <p class="list-item-meta">Кому: ${escapeHtml(names[uid] || `Пользователь #${uid}`)} | Мероприятие #${row.event_id}</p>
+          <p class="list-item-meta">Кому: ${userEntityLinkFromName(uid, names[uid])} | Мероприятие: ${eventEntityLink(eid, row.event_title)}</p>
           <p class="list-item-meta">Статус: ожидает ответа</p>
           <div class="detail-actions">
             <button type="button" class="btn btn-muted btn-inline" data-inbox-cancel-task-invitation="${tid}" data-inbox-cancel-task-user="${uid}">Отменить</button>
@@ -869,12 +894,11 @@ async function openTaskInvitationPreview(taskId, opts = {}) {
 
   try {
     const task = await apiRequest(`${API.tasks}${taskId}/invitation-preview`);
-    const eventTitle = getEventTitle(task.event_id) || `Мероприятие #${task.event_id}`;
     el.screenTitle.textContent = task.title || `Задача #${taskId}`;
     root.innerHTML = `
       <div class="panel">
         <p class="list-item-meta">Вас пригласили исполнить задачу. Ознакомьтесь с деталями и примите решение.</p>
-        <p class="list-item-meta">Мероприятие: ${escapeHtml(eventTitle)}</p>
+        <p class="list-item-meta">Мероприятие: ${eventEntityLink(task.event_id, task.event_title)}</p>
         <dl class="detail-dl">
           <dt>Название</dt><dd>${escapeHtml(task.title)}</dd>
           <dt>Статус</dt><dd>${enumLabel("taskStatus", task.status)}</dd>

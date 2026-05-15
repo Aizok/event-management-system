@@ -19,6 +19,7 @@ class TaskAssigneeResponse(BaseModel):
 class TaskAssigneeInvitationItem(BaseModel):
     task_id: int
     event_id: int
+    event_title: str
     title: str
     invited_by: Optional[int] = None
     created_at: Optional[datetime] = None
@@ -29,6 +30,7 @@ class TaskAssigneeInvitationItem(BaseModel):
 class TaskSentInvitationItem(BaseModel):
     task_id: int
     event_id: int
+    event_title: str
     title: str
     invitee_user_id: int
     created_at: Optional[datetime] = None
@@ -50,6 +52,7 @@ class TaskInvitationPreview(BaseModel):
     end_time: datetime
     deadline: datetime
     event_id: int
+    event_title: str
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -17,6 +17,7 @@ from ....schemas.task import (
     TaskPriority,
 )
 from ....core.events import publish_task_created, publish_task_updated
+from ....core.event_client import get_event_title
 from ....core.permissions import (
     check_task_permissions,
     ALLOWED_ROLES,
@@ -193,7 +194,19 @@ async def read_task_invitation_preview(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     if user_data.role != "admin":
         await check_task_invitation_preview_permissions(db, task_id, user_id)
-    return task
+    event_title = await get_event_title(task.event_id) or f"Мероприятие #{task.event_id}"
+    return TaskInvitationPreview(
+        id=task.id,
+        title=task.title,
+        description=task.description,
+        status=task.status,
+        priority=task.priority,
+        start_time=task.start_time,
+        end_time=task.end_time,
+        deadline=task.deadline,
+        event_id=task.event_id,
+        event_title=event_title,
+    )
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
