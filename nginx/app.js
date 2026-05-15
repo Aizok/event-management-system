@@ -226,7 +226,7 @@ function taskAssigneeStatusLabel(status) {
   const map = {
     pending: "ожидает ответа",
     accepted: "принято",
-    declined: "отклонено"
+    declined: "отказ от задачи"
   };
   return map[String(status || "").toLowerCase()] || String(status || "");
 }
@@ -1752,6 +1752,11 @@ function renderEventDetailCard(
     Number(state.profileId) !== Number(event.owner_id);
   const canRemoveEventParticipants =
     state.profileId != null && Number(state.profileId) === Number(event.owner_id);
+  const canViewParticipantAssignedTasks =
+    state.role === "admin" ||
+    (myMembership &&
+      String(myMembership.membership_status || "").toLowerCase() === "active" &&
+      ["owner", "organizer"].includes(String(myMembership.role || "").toLowerCase()));
   const taskById = Object.fromEntries(tasks.map((t) => [t.id, t]));
   const tasksForList = sortTasksByPlannedStart(tasks);
 
@@ -1822,8 +1827,11 @@ function renderEventDetailCard(
               const removeBtn = showRemove
                 ? `<button type="button" class="btn btn-danger btn-inline" data-event-remove-participant="${participant.user_id}">Удалить</button>`
                 : "";
+              const assignedTasksBtn = canViewParticipantAssignedTasks
+                ? `<button type="button" class="btn btn-muted btn-inline" data-event-participant-tasks="${participant.user_id}">Назначенные задачи</button>`
+                : "";
               return `
-        <article class="list-item">
+        <article class="list-item" data-participant-id="${participant.user_id}">
           <p class="list-item-title event-detail-task-row">
             <span class="event-detail-task-row-titleblock">
             <button type="button" class="entity-link" data-entity-link="user" data-id="${participant.user_id}">
@@ -1834,9 +1842,10 @@ function renderEventDetailCard(
               )}
             </button>
             </span>
-            ${removeBtn}
+            ${assignedTasksBtn}${removeBtn}
           </p>
           <p class="list-item-meta">Роль в мероприятии: ${enumLabel("participantRole", participant.role)}</p>
+          <div id="participant-tasks-${participant.user_id}" class="hidden" style="margin-top:8px"></div>
         </article>`;
             }
           )
@@ -2018,7 +2027,61 @@ function renderEventDetailCard(
       });
     });
   }
+  if (canViewParticipantAssignedTasks) {
+    root.querySelectorAll("[data-event-participant-tasks]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        void onEventParticipantTasksToggle(event.id, Number(btn.dataset.eventParticipantTasks));
+      });
+    });
+  }
   void renderEventDependencyMermaid(tasks, depMap);
+}
+
+function renderParticipantAssignedTasksHtml(tasks, participantUserId, eventId) {
+  if (!tasks.length) {
+    return '<p class="list-item-meta">Нет назначенных задач</p>';
+  }
+  return `<ul class="list">${tasks
+    .map((t) => {
+      const assignee = (Array.isArray(t.assignees) ? t.assignees : []).find(
+        (a) => Number(a.user_id) === Number(participantUserId)
+      );
+      const assignLabel = assignee ? taskAssigneeStatusLabel(assignee.status) : "—";
+      return `<li class="list-item">
+          <p class="list-item-title">
+            <button type="button" class="entity-link" data-entity-link="task" data-id="${t.id}" data-return-event="${eventId}">
+              ${escapeHtml(t.title)}
+            </button>
+            <span class="badge">${enumLabel("taskStatus", t.status)}</span>
+          </p>
+          <p class="list-item-meta">План: ${formatDateTime(t.start_time)} — ${formatDateTime(t.end_time)}</p>
+          <p class="list-item-meta">Назначение: ${escapeHtml(assignLabel)}</p>
+        </li>`;
+    })
+    .join("")}</ul>`;
+}
+
+async function onEventParticipantTasksToggle(eventId, userId) {
+  const panel = document.getElementById(`participant-tasks-${userId}`);
+  if (!panel) return;
+  if (!panel.classList.contains("hidden")) {
+    panel.classList.add("hidden");
+    return;
+  }
+  panel.classList.remove("hidden");
+  if (panel.dataset.loaded === "1") return;
+  panel.innerHTML = '<p class="list-item-meta">Загрузка…</p>';
+  try {
+    const tasks = await apiRequest(
+      `${API.tasks}event/${eventId}/participant/${userId}/assigned`
+    );
+    panel.innerHTML = renderParticipantAssignedTasksHtml(tasks, userId, eventId);
+    panel.dataset.loaded = "1";
+  } catch (error) {
+    panel.innerHTML = `<p class="list-item-meta" style="color:var(--danger)">${escapeHtml(error.message)}</p>`;
+  }
 }
 
 async function onEventEditSubmit(event, eventId) {
@@ -2285,6 +2348,15 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
     </div>`;
   }
 
+  const canWithdrawFromTask = isTaskAcceptedAssignee(task);
+  const withdrawSection = canWithdrawFromTask
+    ? `<div class="panel" style="margin-top:12px">
+      <div class="detail-actions">
+        <button type="button" class="btn btn-danger btn-inline" id="task-withdraw-btn">Отказаться от задачи</button>
+      </div>
+    </div>`
+    : "";
+
   const assigneesListHtml =
     assignRows.length === 0
       ? '<p class="list-item-meta">Нет приглашённых исполнителей.</p>'
@@ -2385,6 +2457,7 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
     ${taskResourceAllocSection}
     ${depsSection}
     ${editSection}
+    ${withdrawSection}
   `;
 
   if (mode === "full" && canManage) {
@@ -2421,6 +2494,22 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
       document.getElementById("task-status-section").classList.remove("hidden");
     });
     document.getElementById("task-status-form").addEventListener("submit", (e) => onTaskStatusSubmit(e, task.id));
+  }
+  const withdrawBtn = document.getElementById("task-withdraw-btn");
+  if (withdrawBtn) {
+    withdrawBtn.addEventListener("click", () => void onTaskAssigneeWithdraw(task.id));
+  }
+}
+
+async function onTaskAssigneeWithdraw(taskId) {
+  if (!confirm("Отказаться от выполнения этой задачи?")) return;
+  try {
+    await apiRequest(`${API.tasks}${taskId}/assignees/me/withdraw`, { method: "POST" });
+    notify("Вы отказались от задачи");
+    await refreshData();
+    await openTaskDetail(taskId, taskDetailReopenOpts());
+  } catch (error) {
+    notify(`Ошибка: ${error.message}`, true);
   }
 }
 

@@ -196,6 +196,26 @@ async def decline_task_assignee(
     return row
 
 
+@router.post("/{task_id}/assignees/me/withdraw", response_model=TaskAssigneeResponse)
+async def withdraw_task_assignee(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    profile_id: int = Depends(get_current_profile_id),
+):
+    task = await task_crud.get(db, task_id)
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    user_id = profile_id
+    row = await task_assignee_crud.withdraw(db, task_id, user_id)
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No active assignment to withdraw from",
+        )
+    await db.commit()
+    return row
+
+
 @router.delete("/{task_id}/assignees/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_task_assignee(
     task_id: int,

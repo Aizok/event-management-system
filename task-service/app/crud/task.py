@@ -140,6 +140,27 @@ class TaskCRUD:
         return tasks
 
 
+    async def get_by_event_for_user_as_assignee(
+        self, db: AsyncSession, event_id: int, assignee_user_id: int
+    ) -> List[Task]:
+        assigned = exists(
+            select(TaskAssignee.id).where(
+                TaskAssignee.task_id == Task.id,
+                TaskAssignee.user_id == assignee_user_id,
+            )
+        )
+        query = (
+            select(Task)
+            .where(Task.event_id == event_id, assigned)
+            .order_by(Task.start_time.asc(), Task.id.asc())
+        )
+        result = await db.execute(query)
+        tasks = result.scalars().all()
+        for task in tasks:
+            task.is_late_start = is_late_start(task)
+        return tasks
+
+
     async def get_by_event_ids(self, db: AsyncSession, event_ids: List[int] ,skip: int=0, limit: int=100):
         query = (
             select(Task)
@@ -229,32 +250,30 @@ class TaskCRUD:
 
 
     async def delete(self, db: AsyncSession, task_id: int) -> bool:
-        async with db.begin():
-            parent_ids=await task_dependency_crud.get_parent_ids(db, task_id)
-            child_ids=await task_dependency_crud.get_child_ids(db, task_id)
+        parent_ids = await task_dependency_crud.get_parent_ids(db, task_id)
+        child_ids = await task_dependency_crud.get_child_ids(db, task_id)
 
-            if parent_ids and child_ids:
-                for child_id in child_ids:
-                    for parent_id in parent_ids:
-                        if child_id==parent_id:
-                            continue
+        if parent_ids and child_ids:
+            for child_id in child_ids:
+                for parent_id in parent_ids:
+                    if child_id == parent_id:
+                        continue
 
-                        try:
-                            async with db.begin_nested():
-                                await task_dependency_crud.create(
-                                    db,
-                                    task_id=child_id,
-                                    depends_on_task_id=parent_id,
-                                    commit=False
-                                )
-                        except ValueError:
-                            continue
-                for child_id in child_ids:
-                    await self.recalculate_schedule(db, child_id)
+                    try:
+                        async with db.begin_nested():
+                            await task_dependency_crud.create(
+                                db,
+                                task_id=child_id,
+                                depends_on_task_id=parent_id,
+                                commit=False,
+                            )
+                    except ValueError:
+                        continue
+            for child_id in child_ids:
+                await self.recalculate_schedule(db, child_id)
 
-            query=delete(Task).where(Task.id==task_id)
-            result=await db.execute(query)
-
+        result = await db.execute(delete(Task).where(Task.id == task_id))
+        await db.commit()
         return result.rowcount > 0
 
 

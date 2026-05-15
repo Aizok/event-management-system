@@ -76,6 +76,19 @@ class TaskAssigneeCRUD:
         await db.refresh(row)
         return row
 
+    async def withdraw(
+        self, db: AsyncSession, task_id: int, user_id: int
+    ) -> TaskAssignee | None:
+        row = await self.get_row(db, task_id, user_id)
+        if not row or row.status != TaskAssigneeStatus.ACCEPTED:
+            return None
+        now = datetime.now(timezone.utc)
+        row.status = TaskAssigneeStatus.DECLINED
+        row.responded_at = now
+        await db.flush()
+        await db.refresh(row)
+        return row
+
     async def delete_row(self, db: AsyncSession, task_id: int, user_id: int) -> bool:
         res = await db.execute(
             delete(TaskAssignee).where(

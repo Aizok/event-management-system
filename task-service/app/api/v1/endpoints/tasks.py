@@ -256,6 +256,29 @@ async def read_tasks_by_event(
     return await task_crud.get_by_event_and_assignee(db, event_id, user_id)
 
 
+@router.get(
+    "/event/{event_id}/participant/{participant_user_id}/assigned",
+    response_model=List[TaskResponse],
+)
+async def read_participant_assigned_tasks(
+    event_id: int,
+    participant_user_id: int,
+    db: AsyncSession = Depends(get_db),
+    profile_id: int = Depends(get_current_profile_id),
+    user_data: TokenData = Depends(get_current_user_data),
+):
+    if user_data.role != "admin":
+        role = await get_user_role_in_event(event_id, profile_id)
+        if role not in ALLOWED_ROLES:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions",
+            )
+    return await task_crud.get_by_event_for_user_as_assignee(
+        db, event_id, participant_user_id
+    )
+
+
 @router.put("/{task_id}", response_model=TaskResponse)
 async def update_task(
         task_id: int,
