@@ -1,7 +1,8 @@
-from sqlalchemy import select, func, update, delete, or_, and_
+from sqlalchemy import select, func, update, delete, or_, and_, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Tuple
 from ..models.task import Task, TaskStatus, TaskPriority
+from ..models.task_assignee import TaskAssignee, TaskAssigneeStatus
 from ..models.task_history import TaskHistory
 from ..schemas.task import TaskCreate, TaskUpdate
 from ..crud.task_dependency import task_dependency_crud
@@ -96,7 +97,18 @@ class TaskCRUD:
 
 
     async def get_by_assignee(self, db: AsyncSession, user_id: int):
-        query=select(Task).where(Task.assignee_id == user_id).order_by(Task.start_time.asc(), Task.id.asc())
+        accepted = exists(
+            select(TaskAssignee.id).where(
+                TaskAssignee.task_id == Task.id,
+                TaskAssignee.user_id == user_id,
+                TaskAssignee.status == TaskAssigneeStatus.ACCEPTED,
+            )
+        )
+        query = (
+            select(Task)
+            .where(accepted)
+            .order_by(Task.start_time.asc(), Task.id.asc())
+        )
         result=await db.execute(query)
         tasks=result.scalars().all()
 
@@ -107,9 +119,16 @@ class TaskCRUD:
 
 
     async def get_by_event_and_assignee(self, db, event_id: int, user_id: int):
+        accepted = exists(
+            select(TaskAssignee.id).where(
+                TaskAssignee.task_id == Task.id,
+                TaskAssignee.user_id == user_id,
+                TaskAssignee.status == TaskAssigneeStatus.ACCEPTED,
+            )
+        )
         query = select(Task).where(
             Task.event_id == event_id,
-            Task.assignee_id == user_id
+            accepted,
         ).order_by(Task.start_time.asc(), Task.id.asc())
 
         result = await db.execute(query)
@@ -145,7 +164,9 @@ class TaskCRUD:
         if not update_data:
             return db_obj
 
-        is_executor=db_obj.assignee_id == user_id
+        from ..crud.task_assignee import task_assignee_crud
+
+        is_executor = await task_assignee_crud.is_accepted(db, task_id, user_id)
         if is_executor:
             allowed_fields={"status"}
             forbidden = set(update_data.keys()) - allowed_fields
@@ -349,13 +370,23 @@ class TaskCRUD:
         q: Optional[str],
     ) -> List:
         cond: List = []
+        accepted_as_assignee = exists(
+            select(TaskAssignee.id).where(
+                TaskAssignee.task_id == Task.id,
+                TaskAssignee.user_id == profile_id,
+                TaskAssignee.status == TaskAssigneeStatus.ACCEPTED,
+            )
+        )
         if not is_admin:
             if allowed_event_ids:
                 cond.append(
-                    or_(Task.event_id.in_(allowed_event_ids), Task.assignee_id == profile_id)
+                    or_(
+                        Task.event_id.in_(allowed_event_ids),
+                        accepted_as_assignee,
+                    )
                 )
             else:
-                cond.append(Task.assignee_id == profile_id)
+                cond.append(accepted_as_assignee)
         if event_id is not None:
             cond.append(Task.event_id == event_id)
         if status is not None:

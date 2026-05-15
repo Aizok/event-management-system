@@ -5,7 +5,13 @@ from ....core.database import get_db
 from ....core.security import get_current_service, get_current_user_data, get_current_profile_id
 from ....crud.event import event_crud
 from ....schemas.event import EventCreate, EventUpdate, EventResponse, TokenData
-from ....core.permissions import check_event_permissions, ALLOWED_ROLES, check_event_read_permissions, check_event_create_permissions
+from ....core.permissions import (
+    check_event_permissions,
+    ALLOWED_ROLES,
+    check_event_read_permissions,
+    check_event_preview_permissions,
+    check_event_create_permissions,
+)
 
 ALLOWED_SERVICES={"task-service", "resource-service", "ai-assistant"}
 
@@ -88,6 +94,24 @@ async def read_events(
     if not allowed_event_ids:
         return []
     return await event_crud.get_by_event_ids(db, allowed_event_ids, skip, limit)
+
+
+@router.get("/{event_id}/invitation-preview", response_model=EventResponse)
+async def read_event_invitation_preview(
+    event_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_profile_id),
+    user_data: TokenData = Depends(get_current_user_data),
+):
+    event = await event_crud.get(db, event_id)
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found",
+        )
+    if user_data.role != "admin":
+        await check_event_preview_permissions(db, event.id, user_id)
+    return event
 
 
 @router.get("/{event_id}", response_model=EventResponse)

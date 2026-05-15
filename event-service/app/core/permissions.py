@@ -1,6 +1,6 @@
 from fastapi import HTTPException, status
 from sqlalchemy import select
-from ..models.event_participant import EventParticipant
+from ..models.event_participant import EventParticipant, MembershipStatus
 from ..schemas.event import TokenRole
 
 ALLOWED_ROLES={"owner", "organizer"}
@@ -18,7 +18,8 @@ async def check_event_permissions(db, event_id: int, user_id: int):
         select(EventParticipant.role)
         .where(
             EventParticipant.event_id == event_id,
-            EventParticipant.user_id == user_id
+            EventParticipant.user_id == user_id,
+            EventParticipant.membership_status == MembershipStatus.ACTIVE,
         )
     )
     role = result.scalar_one_or_none()
@@ -29,18 +30,26 @@ async def check_event_permissions(db, event_id: int, user_id: int):
             detail="Not enough permissions"
         )
 
+
 async def check_event_read_permissions(db, event_id: int, user_id: int):
+    await check_event_preview_permissions(db, event_id, user_id)
+
+
+async def check_event_preview_permissions(db, event_id: int, user_id: int):
     result = await db.execute(
-        select(EventParticipant.role)
+        select(EventParticipant.membership_status)
         .where(
             EventParticipant.event_id == event_id,
-            EventParticipant.user_id == user_id
+            EventParticipant.user_id == user_id,
         )
     )
-    role = result.scalar_one_or_none()
+    membership_status = result.scalar_one_or_none()
 
-    if role is None:
+    if membership_status not in (
+        MembershipStatus.PENDING,
+        MembershipStatus.ACTIVE,
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
+            detail="Not enough permissions",
         )

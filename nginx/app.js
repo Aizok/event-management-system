@@ -23,7 +23,8 @@ const state = {
   tasksLimit: 25,
   tasksFilters: { eventId: "", status: "", priority: "", q: "" },
   resources: [],
-  assigneeNames: {}
+  assigneeNames: {},
+  inboxTab: "incoming"
 };
 
 const API = {
@@ -55,7 +56,7 @@ const el = {
   aiResult: document.getElementById("ai-result"),
   protectedContent: document.getElementById("protected-content"),
   taskEventSelect: document.getElementById("task-event-select"),
-  taskAssigneeSelect: document.getElementById("task-assignee-select"),
+  taskCreateInviteSelect: document.getElementById("task-create-invite-select"),
   resourceEventSelect: document.getElementById("resource-event-select"),
   aiEventSelect: document.getElementById("ai-event-select"),
   allocationEventSelect: document.getElementById("allocation-event-select"),
@@ -204,10 +205,30 @@ function canCreate() {
   return state.role === "admin" || state.role === "organizer";
 }
 
+function taskAssigneeStatusLabel(status) {
+  const map = {
+    pending: "ожидает ответа",
+    accepted: "принято",
+    declined: "отклонено"
+  };
+  return map[String(status || "").toLowerCase()] || String(status || "");
+}
+
+function isTaskAcceptedAssignee(task) {
+  if (!task || state.profileId == null) return false;
+  const pid = Number(state.profileId);
+  const rows = Array.isArray(task.assignees) ? task.assignees : [];
+  return rows.some((a) => Number(a.user_id) === pid && String(a.status).toLowerCase() === "accepted");
+}
+
 function taskDetailMode(task) {
   if (state.role === "admin") return "full";
   if (canCreate()) return "full";
-  if (state.role === "executor" && state.profileId != null && task.assignee_id === state.profileId) {
+  if (
+    state.role === "executor" &&
+    state.profileId != null &&
+    isTaskAcceptedAssignee(task)
+  ) {
     return "status_only";
   }
   return "read";
@@ -256,6 +277,7 @@ function screenName(screenId) {
     tasks: "Задачи",
     resources: "Ресурсы",
     users: "Пользователи",
+    inbox: "Входящие",
     ai: "ИИ помощник",
     "profile-cabinet": "Профиль",
     "user-detail": "Пользователь"
@@ -334,6 +356,9 @@ function setScreen(screenId) {
     syncTasksFilterFormFromState();
     void loadTasksPage();
   }
+  if (screenId === "inbox") {
+    void loadInbox();
+  }
   if (screenId === "ai") {
     if (state.aiDraft) renderAiDraft();
     else clearAiDraft();
@@ -392,7 +417,7 @@ function updateTopbarActions() {
       if (cfg.panel === "task-create-panel" && !panel.classList.contains("hidden")) {
         const selectedId = state.taskCreatePresetEventId;
         populateTaskEventOptions(selectedId);
-        void loadAssigneeOptions(selectedId);
+        void loadTaskCreateInviteOptions(selectedId);
       }
       if (cfg.panel === "resource-create-panel" && !panel.classList.contains("hidden")) {
         populateResourceEventOptions();
@@ -508,7 +533,13 @@ async function loadTasksPage(options = {}) {
     state.tasksPage = items;
     state.tasksTotal = total;
     state.assigneeNames = {};
-    const assigneeIds = [...new Set(items.map((t) => t.assignee_id).filter((id) => id != null && id !== ""))];
+    const assigneeIds = [
+      ...new Set(
+        items.flatMap((t) => {
+          return (t.assignees || []).map((a) => a.user_id);
+        })
+      )
+    ].filter((id) => id != null && id !== "");
     if (assigneeIds.length) {
       const params = new URLSearchParams();
       assigneeIds.forEach((id) => params.append("ids", String(id)));
@@ -532,6 +563,265 @@ async function loadTasksPage(options = {}) {
     updateTasksPageControls();
     notify(error.message, true);
   }
+}
+
+function syncInboxTabUi() {
+  document.querySelectorAll(".inbox-tab").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.inboxTab === state.inboxTab);
+  });
+  const hint = document.getElementById("inbox-hint");
+  if (hint) {
+    hint.textContent =
+      state.inboxTab === "incoming"
+        ? "Мероприятия и задачи, в которые вас пригласили и ожидают ответа."
+        : "Приглашения, которые вы отправили и ожидают ответа.";
+  }
+}
+
+async function resolveProfileNames(profileIds) {
+  const ids = [...new Set(profileIds.filter((id) => id != null && id !== ""))];
+  if (!ids.length) return {};
+  const params = new URLSearchParams();
+  ids.forEach((id) => params.append("ids", String(id)));
+  try {
+    const profiles = await apiRequest(`${API.users}/public/by-ids?${params.toString()}`);
+    return Object.fromEntries(
+      (Array.isArray(profiles) ? profiles : []).map((p) => [
+        Number(p.id),
+        `${p.first_name || ""} ${p.last_name || ""}`.trim() || `Пользователь #${p.id}`
+      ])
+    );
+  } catch {
+    return {};
+  }
+}
+
+function formatInvitationDescription(text) {
+  if (!text || !String(text).trim()) return "";
+  const s = String(text).trim();
+  const short = s.length > 160 ? `${s.slice(0, 160)}…` : s;
+  return `<p class="list-item-meta">${escapeHtml(short)}</p>`;
+}
+
+async function loadInbox() {
+  const root = document.getElementById("inbox-root");
+  if (!root) return;
+  syncInboxTabUi();
+  if (!state.token || !state.profileId) {
+    root.innerHTML = '<p class="list-item-meta">Войдите в систему.</p>';
+    return;
+  }
+  root.innerHTML = '<p class="list-item-meta">Загрузка…</p>';
+  if (state.inboxTab === "outgoing") {
+    await loadInboxOutgoing(root);
+  } else {
+    await loadInboxIncoming(root);
+  }
+}
+
+async function loadInboxIncoming(root) {
+  let eventInv = [];
+  let taskInv = [];
+  try {
+    eventInv = await apiRequest(`${API.events}invitations/me`);
+  } catch {
+    eventInv = [];
+  }
+  try {
+    taskInv = await apiRequest(`${API.tasks}invitations/me`);
+  } catch {
+    taskInv = [];
+  }
+  if (!Array.isArray(eventInv)) eventInv = [];
+  if (!Array.isArray(taskInv)) taskInv = [];
+  if (!eventInv.length && !taskInv.length) {
+    root.innerHTML = '<p class="list-item-meta">Нет ожидающих приглашений.</p>';
+    return;
+  }
+  const blocks = [];
+  if (eventInv.length) {
+    blocks.push("<h3>Мероприятия</h3>");
+    eventInv.forEach((row) => {
+      const eid = Number(row.event_id);
+      const when =
+        row.start_time && row.end_time
+          ? `${formatDateTime(row.start_time)} — ${formatDateTime(row.end_time)}`
+          : "";
+      const loc = row.location ? escapeHtml(row.location) : "";
+      blocks.push(`
+        <article class="list-item">
+          <p class="list-item-title">${escapeHtml(row.title || `Мероприятие #${eid}`)}</p>
+          <p class="list-item-meta">Роль: ${enumLabel("participantRole", row.role)}</p>
+          ${when ? `<p class="list-item-meta">${when}</p>` : ""}
+          ${loc ? `<p class="list-item-meta">Локация: ${loc}</p>` : ""}
+          ${formatInvitationDescription(row.description)}
+          <div class="detail-actions" style="margin-top:8px">
+            <button type="button" class="btn btn-primary btn-inline" data-inbox-accept-event="${eid}">Принять</button>
+            <button type="button" class="btn btn-muted btn-inline" data-inbox-decline-event="${eid}">Отклонить</button>
+            <button type="button" class="btn btn-muted btn-inline" data-inbox-preview-event="${eid}">Подробнее</button>
+          </div>
+        </article>`);
+    });
+  }
+  if (taskInv.length) {
+    blocks.push("<h3 style=\"margin-top:16px\">Задачи</h3>");
+    taskInv.forEach((row) => {
+      const tid = Number(row.task_id);
+      blocks.push(`
+        <article class="list-item">
+          <p class="list-item-title">${escapeHtml(row.title || `Задача #${tid}`)}</p>
+          <p class="list-item-meta">Мероприятие #${row.event_id}</p>
+          <div class="detail-actions" style="margin-top:8px">
+            <button type="button" class="btn btn-primary btn-inline" data-inbox-accept-task="${tid}">Принять</button>
+            <button type="button" class="btn btn-muted btn-inline" data-inbox-decline-task="${tid}">Отклонить</button>
+          </div>
+        </article>`);
+    });
+  }
+  root.innerHTML = blocks.join("");
+}
+
+async function loadInboxOutgoing(root) {
+  let eventSent = [];
+  let taskSent = [];
+  try {
+    eventSent = await apiRequest(`${API.events}invitations/sent/me`);
+  } catch {
+    eventSent = [];
+  }
+  try {
+    taskSent = await apiRequest(`${API.tasks}invitations/sent/me`);
+  } catch {
+    taskSent = [];
+  }
+  if (!Array.isArray(eventSent)) eventSent = [];
+  if (!Array.isArray(taskSent)) taskSent = [];
+  const names = await resolveProfileNames([
+    ...eventSent.map((r) => r.invitee_user_id),
+    ...taskSent.map((r) => r.invitee_user_id)
+  ]);
+  if (!eventSent.length && !taskSent.length) {
+    root.innerHTML = '<p class="list-item-meta">Нет отправленных приглашений в ожидании ответа.</p>';
+    return;
+  }
+  const blocks = [];
+  if (eventSent.length) {
+    blocks.push("<h3>Мероприятия</h3>");
+    eventSent.forEach((row) => {
+      const uid = Number(row.invitee_user_id);
+      blocks.push(`
+        <article class="list-item">
+          <p class="list-item-title">${escapeHtml(row.event_title || `Мероприятие #${row.event_id}`)}</p>
+          <p class="list-item-meta">Кому: ${escapeHtml(names[uid] || `Пользователь #${uid}`)} | Роль: ${enumLabel("participantRole", row.role)}</p>
+          <p class="list-item-meta">Статус: ожидает ответа</p>
+        </article>`);
+    });
+  }
+  if (taskSent.length) {
+    blocks.push("<h3 style=\"margin-top:16px\">Задачи</h3>");
+    taskSent.forEach((row) => {
+      const uid = Number(row.invitee_user_id);
+      blocks.push(`
+        <article class="list-item">
+          <p class="list-item-title">${escapeHtml(row.title || `Задача #${row.task_id}`)}</p>
+          <p class="list-item-meta">Кому: ${escapeHtml(names[uid] || `Пользователь #${uid}`)} | Мероприятие #${row.event_id}</p>
+          <p class="list-item-meta">Статус: ожидает ответа</p>
+        </article>`);
+    });
+  }
+  root.innerHTML = blocks.join("");
+}
+
+async function openEventInvitationPreview(eventId, opts = {}) {
+  if (opts.fromInbox) {
+    state.detailBackTarget = { kind: "inbox" };
+  }
+  state.detailView = "event-invitation";
+  state.detailEventId = eventId;
+  hideAllScreens();
+  document.getElementById("event-detail-screen").classList.remove("hidden");
+  el.screenTitle.textContent = "Приглашение в мероприятие";
+  updateTopbarActions();
+
+  const root = document.getElementById("event-detail-root");
+  root.innerHTML = '<p class="list-item-meta">Загрузка…</p>';
+
+  try {
+    const event = await apiRequest(`${API.events}${eventId}/invitation-preview`);
+    el.screenTitle.textContent = event.title || `Мероприятие #${eventId}`;
+    root.innerHTML = `
+      <div class="panel">
+        <p class="list-item-meta">Вы приглашены участвовать в мероприятии. Ознакомьтесь с деталями и примите решение.</p>
+        <dl class="detail-dl">
+          <dt>Название</dt><dd>${escapeHtml(event.title)}</dd>
+          <dt>Статус</dt><dd>${enumLabel("eventStatus", event.status)}</dd>
+          <dt>Начало</dt><dd>${formatDateTime(event.start_time)}</dd>
+          <dt>Окончание</dt><dd>${formatDateTime(event.end_time)}</dd>
+          <dt>Локация</dt><dd>${escapeHtml(event.location || "—")}</dd>
+          <dt>Бюджет</dt><dd>${event.budget ?? 0}</dd>
+        </dl>
+        <p class="list-item-meta" style="margin-top:12px">${escapeHtml(event.description || "Без описания")}</p>
+        <div class="detail-actions" style="margin-top:16px">
+          <button type="button" class="btn btn-primary btn-inline" data-inbox-accept-event="${eventId}">Принять</button>
+          <button type="button" class="btn btn-muted btn-inline" data-inbox-decline-event="${eventId}">Отклонить</button>
+        </div>
+      </div>`;
+  } catch (error) {
+    notify(error.message, true);
+    await closeDetailView();
+  }
+}
+
+async function leaveEventAsParticipant(eventId) {
+  if (!confirm("Покинуть это мероприятие? Вы потеряете доступ к его задачам и ресурсам.")) return;
+  try {
+    await apiRequest(`${API.events}${eventId}/participants/me/leave`, { method: "POST" });
+    notify("Вы покинули мероприятие");
+    await closeDetailView();
+    await refreshData();
+  } catch (error) {
+    notify(`Ошибка: ${error.message}`, true);
+  }
+}
+
+async function acceptEventInvitation(eventId) {
+  await apiRequest(`${API.events}${eventId}/participants/me/accept`, { method: "POST" });
+  notify("Вы приняли приглашение в мероприятие");
+  if (state.detailView === "event-invitation") {
+    state.detailBackTarget = null;
+    state.detailView = null;
+    state.detailEventId = null;
+    await refreshData();
+    await openEventDetail(eventId);
+    return;
+  }
+  await refreshData();
+  if (state.currentScreen === "inbox") await loadInbox();
+}
+
+async function declineEventInvitation(eventId) {
+  await apiRequest(`${API.events}${eventId}/participants/me/decline`, { method: "POST" });
+  notify("Приглашение в мероприятие отклонено");
+  if (state.detailView === "event-invitation") {
+    await closeDetailView();
+    return;
+  }
+  if (state.currentScreen === "inbox") await loadInbox();
+}
+
+async function acceptTaskInvitation(taskId) {
+  if (!state.profileId) return;
+  await apiRequest(`${API.tasks}${taskId}/assignees/${state.profileId}/accept`, { method: "POST" });
+  notify("Вы приняли приглашение на задачу");
+  await refreshData();
+  await loadInbox();
+}
+
+async function declineTaskInvitation(taskId) {
+  if (!state.profileId) return;
+  await apiRequest(`${API.tasks}${taskId}/assignees/${state.profileId}/decline`, { method: "POST" });
+  notify("Приглашение на задачу отклонено");
+  await loadInbox();
 }
 
 function populateResourceEventOptions(selectedEventId = null) {
@@ -581,10 +871,18 @@ function renderEvents() {
 function renderTasks() {
   renderList(el.tasksList, state.tasksPage, (task) => {
     const eventTitle = escapeHtml(getEventTitle(task.event_id));
-    const assigneeLabel =
-      task.assignee_id == null
-        ? "не назначен"
-        : escapeHtml(state.assigneeNames[task.assignee_id] || "Исполнитель");
+    const rows = Array.isArray(task.assignees) ? task.assignees : [];
+    let assigneeLabel;
+    if (rows.length) {
+      assigneeLabel = rows
+        .map((a) => {
+          const name = state.assigneeNames[a.user_id] || `#${a.user_id}`;
+          return `${escapeHtml(name)} (${taskAssigneeStatusLabel(a.status)})`;
+        })
+        .join(", ");
+    } else {
+      assigneeLabel = "не назначен";
+    }
     return `
     <p class="list-item-title">
       <button type="button" class="entity-link" data-entity-link="task" data-id="${task.id}">
@@ -747,9 +1045,9 @@ function populateTaskEventOptions(selectedEventId = null) {
   el.taskEventSelect.innerHTML = options.join("");
 }
 
-async function loadAssigneeOptions(eventId, selectedAssigneeId = null) {
-  if (!el.taskAssigneeSelect) return;
-  el.taskAssigneeSelect.innerHTML = '<option value="">Без исполнителя</option>';
+async function loadTaskCreateInviteOptions(eventId) {
+  if (!el.taskCreateInviteSelect) return;
+  el.taskCreateInviteSelect.innerHTML = '<option value="">Не приглашать</option>';
   if (!eventId) return;
   try {
     const participants = await apiRequest(`${API.events}${eventId}/participants`);
@@ -771,43 +1069,7 @@ async function loadAssigneeOptions(eventId, selectedAssigneeId = null) {
       const option = document.createElement("option");
       option.value = String(profile.id);
       option.textContent = `${profile.first_name} ${profile.last_name} (${enumLabel("participantRole", profile.role)})`;
-      if (selectedAssigneeId != null && Number(selectedAssigneeId) === profile.id) {
-        option.selected = true;
-      }
-      el.taskAssigneeSelect.appendChild(option);
-    });
-  } catch (error) {
-    notify(`Не удалось загрузить исполнителей: ${error.message}`, true);
-  }
-}
-
-async function loadTaskEditAssigneeOptions(eventId, selectedAssigneeId = null) {
-  const select = document.getElementById("task-edit-assignee-select");
-  if (!select) return;
-  select.innerHTML = '<option value="">Без исполнителя</option>';
-  if (!eventId) return;
-  try {
-    const participants = await apiRequest(`${API.events}${eventId}/participants`);
-    const candidateIds = Array.from(
-      new Set(
-        (participants || [])
-          .filter((item) => ["owner", "organizer", "executor"].includes(item.role))
-          .map((item) => item.user_id)
-      )
-    );
-    if (!candidateIds.length) return;
-    const params = new URLSearchParams();
-    candidateIds.forEach((id) => params.append("ids", String(id)));
-    const profiles = await apiRequest(`${API.users}/public/by-ids?${params.toString()}`);
-    profiles.forEach((profile) => {
-      if (!["organizer", "executor"].includes(profile.role)) return;
-      const option = document.createElement("option");
-      option.value = String(profile.id);
-      option.textContent = `${profile.first_name} ${profile.last_name} (${enumLabel("participantRole", profile.role)})`;
-      if (selectedAssigneeId != null && Number(selectedAssigneeId) === profile.id) {
-        option.selected = true;
-      }
-      select.appendChild(option);
+      el.taskCreateInviteSelect.appendChild(option);
     });
   } catch (error) {
     notify(`Не удалось загрузить исполнителей: ${error.message}`, true);
@@ -822,7 +1084,7 @@ async function presetTaskCreateForEvent(eventId) {
     panel.classList.remove("hidden");
   }
   populateTaskEventOptions(eventId);
-  await loadAssigneeOptions(eventId);
+  await loadTaskCreateInviteOptions(eventId);
 }
 
 async function openUsersForEventParticipants(eventId) {
@@ -975,7 +1237,7 @@ async function refreshData() {
   void populateAllocationTaskOptions(state.allocationPreset.eventId, state.allocationPreset.taskId);
   populateAllocationResourceOptions(state.allocationPreset.eventId, state.allocationPreset.resourceId);
   if (state.taskCreatePresetEventId != null) {
-    await loadAssigneeOptions(state.taskCreatePresetEventId);
+    await loadTaskCreateInviteOptions(state.taskCreatePresetEventId);
   }
 
   if (state.currentScreen === "tasks") {
@@ -1025,6 +1287,17 @@ async function loadUsers() {
 }
 
 async function closeDetailView() {
+  if (state.detailBackTarget?.kind === "inbox") {
+    state.detailBackTarget = null;
+    state.detailView = null;
+    state.detailEventId = null;
+    hideAllScreens();
+    document.getElementById("inbox-screen").classList.remove("hidden");
+    el.screenTitle.textContent = screenName("inbox");
+    updateTopbarActions();
+    await loadInbox();
+    return;
+  }
   if (state.detailBackTarget?.kind === "event") {
     const id = state.detailBackTarget.id;
     state.detailBackTarget = null;
@@ -1055,6 +1328,17 @@ async function openEventDetail(eventId) {
   root.innerHTML = '<p class="list-item-meta">Загрузка карточки…</p>';
 
   try {
+    let myMembership = null;
+    try {
+      myMembership = await apiRequest(`${API.events}${eventId}/participants/me`);
+    } catch {
+      myMembership = null;
+    }
+    if (myMembership && String(myMembership.membership_status || "").toLowerCase() === "pending") {
+      await openEventInvitationPreview(eventId);
+      return;
+    }
+
     const event = await apiRequest(`${API.events}${eventId}`);
     const tasks = await apiRequest(`${API.tasks}event/${eventId}`);
     const participants = await apiRequest(`${API.events}${eventId}/participants`);
@@ -1090,7 +1374,16 @@ async function openEventDetail(eventId) {
     }
 
     el.screenTitle.textContent = event.title || `Мероприятие #${eventId}`;
-    renderEventDetailCard(event, tasks, depMap, participants, participantProfiles, eventResources, ownerProfile);
+    renderEventDetailCard(
+      event,
+      tasks,
+      depMap,
+      participants,
+      participantProfiles,
+      eventResources,
+      ownerProfile,
+      myMembership
+    );
     notify("Готово");
   } catch (error) {
     notify(error.message, true);
@@ -1281,9 +1574,23 @@ function collectEventLevelAllocations(eventResources) {
   return out;
 }
 
-function renderEventDetailCard(event, tasks, depMap, participants, participantProfiles, eventResources, ownerProfile) {
+function renderEventDetailCard(
+  event,
+  tasks,
+  depMap,
+  participants,
+  participantProfiles,
+  eventResources,
+  ownerProfile,
+  myMembership = null
+) {
   const root = document.getElementById("event-detail-root");
   const canManage = canCreate();
+  const canLeaveEvent =
+    myMembership &&
+    String(myMembership.membership_status || "").toLowerCase() === "active" &&
+    state.profileId != null &&
+    Number(state.profileId) !== Number(event.owner_id);
   const canRemoveEventParticipants =
     state.profileId != null && Number(state.profileId) === Number(event.owner_id);
   const taskById = Object.fromEntries(tasks.map((t) => [t.id, t]));
@@ -1393,6 +1700,15 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
           )
           .join("");
 
+  const leaveSection = canLeaveEvent
+    ? `
+    <div class="panel">
+      <div class="detail-actions">
+        <button type="button" class="btn btn-danger btn-inline" data-event-leave-participant="${event.id}">Покинуть мероприятие</button>
+      </div>
+    </div>`
+    : "";
+
   const editSection = canManage
     ? `
     <div class="panel">
@@ -1447,6 +1763,7 @@ function renderEventDetailCard(event, tasks, depMap, participants, participantPr
       </dl>
       <p class="list-item-meta" style="margin-top:12px">${escapeHtml(event.description || "Без описания")}</p>
     </div>
+    ${leaveSection}
     ${editSection}
     <div class="panel">
       <h3>Участники мероприятия</h3>
@@ -1616,7 +1933,10 @@ async function openTaskDetail(taskId, opts = {}) {
     }
     const eventTitle =
       eventRecord?.title?.trim() ? eventRecord.title : getEventTitle(task.event_id) || "Мероприятие";
-    const profileIds = [task.owner_id, task.assignee_id].filter((id) => id != null && id !== "");
+    const assigneeUserIds = (Array.isArray(task.assignees) ? task.assignees : []).map((a) => a.user_id);
+    const profileIds = [...new Set([task.owner_id, ...assigneeUserIds])].filter(
+      (id) => id != null && id !== ""
+    );
     let profilesById = {};
     if (profileIds.length) {
       const params = new URLSearchParams();
@@ -1628,11 +1948,22 @@ async function openTaskDetail(taskId, opts = {}) {
         profilesById = {};
       }
     }
+    const mode = taskDetailMode(task);
+    let eventParticipants = [];
+    if (canCreate() && mode === "full") {
+      try {
+        eventParticipants = await apiRequest(`${API.events}${task.event_id}/participants`);
+        if (!Array.isArray(eventParticipants)) eventParticipants = [];
+      } catch {
+        eventParticipants = [];
+      }
+    }
     const taskDetailMeta = {
       eventTitle,
       ownerProfile: profilesById[Number(task.owner_id)],
-      assigneeProfile: task.assignee_id != null ? profilesById[Number(task.assignee_id)] : null,
-      taskAllocations: collectAllocationsForTask(task)
+      taskAllocations: collectAllocationsForTask(task),
+      assigneeProfilesById: profilesById,
+      eventParticipants
     };
     let dependsOn = [];
     let eventTasksForDeps = [];
@@ -1642,7 +1973,6 @@ async function openTaskDetail(taskId, opts = {}) {
     } catch {
       eventTasksForDeps = [];
     }
-    const mode = taskDetailMode(task);
     if (mode === "full" && canCreate()) {
       try {
         const depPayload = await apiRequest(`${API.tasks}${taskId}/dependency-ids`);
@@ -1700,8 +2030,18 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
   const canManage = canCreate();
   const depsSection = mode === "full" && canManage ? buildTaskDependenciesPanel(task, dependsOnIds, eventTasksForDeps) : "";
   const eventTitle = meta.eventTitle?.trim() ? meta.eventTitle : "Мероприятие";
-  const assigneeDd =
-    task.assignee_id == null ? "—" : userProfileLinkButton(task.assignee_id, meta.assigneeProfile);
+  const profilesMap = meta.assigneeProfilesById || {};
+  const assignRows = Array.isArray(task.assignees) ? task.assignees : [];
+  const assigneesSummary =
+    assignRows.length === 0
+      ? "—"
+      : assignRows
+          .map((a) => {
+            const uid = Number(a.user_id);
+            const prof = profilesMap[uid];
+            return `${userProfileLinkButton(uid, prof)} (${taskAssigneeStatusLabel(a.status)})`;
+          })
+          .join(", ");
   const ownerDd = userProfileLinkButton(task.owner_id, meta.ownerProfile);
 
   const statusSelect = (name, current, options = ["todo", "in_progress", "done", "overdue", "blocked"]) => `
@@ -1716,8 +2056,8 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
     editSection = `
     <div class="panel">
       <div class="detail-actions">
-        <button type="button" class="btn btn-muted btn-inline" id="task-open-allocation-btn">+ Создать назначение ресурса</button>
         <button type="button" class="btn btn-muted btn-inline" id="task-toggle-edit-btn">Редактировать</button>
+        <button type="button" class="btn btn-muted btn-inline" id="task-open-allocation-btn">+ Создать назначение ресурса</button>
       </div>
       <div id="task-edit-section" class="hidden" style="margin-top:12px">
         <h3>Редактирование</h3>
@@ -1730,11 +2070,6 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
               <option value="low" ${task.priority === "low" ? "selected" : ""}>${enumLabel("taskPriority", "low")}</option>
               <option value="medium" ${task.priority === "medium" ? "selected" : ""}>${enumLabel("taskPriority", "medium")}</option>
               <option value="high" ${task.priority === "high" ? "selected" : ""}>${enumLabel("taskPriority", "high")}</option>
-            </select>
-          </label>
-          <label>Исполнитель
-            <select name="assignee_id" id="task-edit-assignee-select">
-              <option value="">Без исполнителя</option>
             </select>
           </label>
           <label>Старт (план)<input type="datetime-local" name="start_time" required value="${toDatetimeLocalValue(task.start_time)}" /></label>
@@ -1764,6 +2099,63 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
       </div>
     </div>`;
   }
+
+  const assigneesListHtml =
+    assignRows.length === 0
+      ? '<p class="list-item-meta">Нет приглашённых исполнителей.</p>'
+      : `<ul class="list">${assignRows
+          .map((a) => {
+            const uid = Number(a.user_id);
+            const prof = profilesMap[uid];
+            const st = taskAssigneeStatusLabel(a.status);
+            const revoke =
+              mode === "full" && canManage
+                ? `<button type="button" class="btn btn-muted btn-inline task-assignee-revoke-btn" data-user-id="${uid}">Отозвать</button>`
+                : "";
+            return `<li class="list-item" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>${userProfileLinkButton(uid, prof)} <span class="list-item-meta">(${st})</span></span>${revoke}</li>`;
+          })
+          .join("")}</ul>`;
+
+  const busyAssigneeIds = new Set(
+    assignRows
+      .filter((a) => {
+        const s = String(a.status || "").toLowerCase();
+        return s === "pending" || s === "accepted";
+      })
+      .map((a) => Number(a.user_id))
+  );
+  const eventParts = Array.isArray(meta.eventParticipants) ? meta.eventParticipants : [];
+  const inviteOptions = eventParts
+    .filter((p) => !busyAssigneeIds.has(Number(p.user_id)) && Number(p.user_id) !== Number(task.owner_id))
+    .map((p) => {
+      const uid = Number(p.user_id);
+      const prof = profilesMap[uid];
+      const nameLabel = formatPublicProfileName(prof) || `Пользователь #${uid}`;
+      return `<option value="${uid}">${escapeHtml(`${nameLabel} — ${enumLabel("participantRole", p.role)}`)}</option>`;
+    })
+    .join("");
+
+  const inviteBlock =
+    mode === "full" && canManage
+      ? `<div style="margin-top:12px" id="task-assignees-invite-panel">
+          <h4>Пригласить исполнителя</h4>
+          <p class="list-item-meta">Из активных участников мероприятия.</p>
+          <div class="detail-actions" style="margin-top:8px;flex-wrap:wrap;gap:8px">
+            <select id="task-assignee-invite-select" style="min-width:220px">
+              <option value="">Выберите пользователя</option>
+              ${inviteOptions}
+            </select>
+            <button type="button" class="btn btn-primary" id="task-assignee-invite-btn">Пригласить</button>
+          </div>
+        </div>`
+      : "";
+
+  const assigneesPanel = `
+    <div class="panel" style="margin-top:12px" id="task-assignees-panel">
+      <h3>Исполнители и приглашения</h3>
+      ${assigneesListHtml}
+      ${inviteBlock}
+    </div>`;
 
   const taskAllocRows = Array.isArray(meta.taskAllocations) ? meta.taskAllocations : [];
   const taskResourceAllocSection = `
@@ -1797,13 +2189,14 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
         <dt>ID</dt><dd>${task.id}</dd>
         <dt>Статус</dt><dd>${enumLabel("taskStatus", task.status)}</dd>
         <dt>Приоритет</dt><dd>${enumLabel("taskPriority", task.priority)}</dd>
-        <dt>Исполнитель</dt><dd>${assigneeDd}</dd>
+        <dt>Исполнители</dt><dd>${assigneesSummary}</dd>
         <dt>Владелец</dt><dd>${ownerDd}</dd>
         <dt>Дедлайн</dt><dd>${new Date(task.deadline).toLocaleString()}</dd>
         <dt>План: старт — окончание</dt><dd>${new Date(task.start_time).toLocaleString()} — ${new Date(task.end_time).toLocaleString()}</dd>
       </dl>
       <p class="list-item-meta" style="margin-top:12px">${escapeHtml(task.description || "Без описания")}</p>
     </div>
+    ${assigneesPanel}
     ${taskResourceAllocSection}
     ${depsSection}
     ${editSection}
@@ -1820,7 +2213,6 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
         addBtn.addEventListener("click", () => onTaskDependencyAdd(task.id));
       }
     }
-    void loadTaskEditAssigneeOptions(task.event_id, task.assignee_id);
     document.getElementById("task-open-allocation-btn").addEventListener("click", () => {
       void openAllocationCreatePanel({ eventId: task.event_id, taskId: task.id });
     });
@@ -1832,6 +2224,13 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
     });
     document.getElementById("task-edit-form").addEventListener("submit", (e) => onTaskEditSubmit(e, task.id));
     document.getElementById("task-delete-btn").addEventListener("click", () => onTaskDelete(task.id));
+    document.querySelectorAll(".task-assignee-revoke-btn").forEach((btn) => {
+      btn.addEventListener("click", () => void onTaskAssigneeRevoke(task.id, Number(btn.dataset.userId)));
+    });
+    const invBtn = document.getElementById("task-assignee-invite-btn");
+    if (invBtn) {
+      invBtn.addEventListener("click", () => void onTaskAssigneeInvite(task.id));
+    }
   } else if (mode === "status_only") {
     document.getElementById("task-toggle-status-btn").addEventListener("click", () => {
       document.getElementById("task-status-section").classList.remove("hidden");
@@ -1840,12 +2239,44 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
   }
 }
 
+async function onTaskAssigneeInvite(taskId) {
+  const sel = document.getElementById("task-assignee-invite-select");
+  if (!sel || !sel.value) {
+    notify("Выберите пользователя для приглашения", true);
+    return;
+  }
+  const userId = Number(sel.value);
+  try {
+    await apiRequest(`${API.tasks}${taskId}/assignees`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId })
+    });
+    notify("Приглашение отправлено");
+    await openTaskDetail(taskId, taskDetailReopenOpts());
+    await refreshData();
+  } catch (error) {
+    notify(`Ошибка приглашения: ${error.message}`, true);
+  }
+}
+
+async function onTaskAssigneeRevoke(taskId, userId) {
+  if (!userId) return;
+  if (!confirm("Отозвать приглашение или убрать исполнителя из задачи?")) return;
+  try {
+    await apiRequest(`${API.tasks}${taskId}/assignees/${userId}`, { method: "DELETE" });
+    notify("Запись исполнителя удалена");
+    await openTaskDetail(taskId, taskDetailReopenOpts());
+    await refreshData();
+  } catch (error) {
+    notify(`Ошибка: ${error.message}`, true);
+  }
+}
+
 async function onTaskEditSubmit(event, taskId) {
   event.preventDefault();
   const form = event.target;
   setFormError(form, "");
   const payload = serializeForm(form);
-  payload.assignee_id = payload.assignee_id ? Number(payload.assignee_id) : null;
   payload.deadline = toIsoOrNull(payload.deadline);
   payload.start_time = toIsoOrNull(payload.start_time);
   payload.end_time = toIsoOrNull(payload.end_time);
@@ -2186,6 +2617,58 @@ async function onResourceDelete(resourceId) {
 }
 
 function onProtectedClick(e) {
+  const inboxTab = e.target.closest("[data-inbox-tab]");
+  if (inboxTab) {
+    e.preventDefault();
+    const tab = inboxTab.dataset.inboxTab;
+    if (tab === "incoming" || tab === "outgoing") {
+      state.inboxTab = tab;
+      void loadInbox();
+    }
+    return;
+  }
+  const previewEv = e.target.closest("[data-inbox-preview-event]");
+  if (previewEv) {
+    e.preventDefault();
+    const id = Number(previewEv.dataset.inboxPreviewEvent);
+    if (!Number.isNaN(id)) void openEventInvitationPreview(id, { fromInbox: true });
+    return;
+  }
+  const leaveEv = e.target.closest("[data-event-leave-participant]");
+  if (leaveEv) {
+    e.preventDefault();
+    const id = Number(leaveEv.dataset.eventLeaveParticipant);
+    if (!Number.isNaN(id)) void leaveEventAsParticipant(id);
+    return;
+  }
+  const acceptEv = e.target.closest("[data-inbox-accept-event]");
+  if (acceptEv) {
+    e.preventDefault();
+    const id = Number(acceptEv.dataset.inboxAcceptEvent);
+    if (!Number.isNaN(id)) void acceptEventInvitation(id);
+    return;
+  }
+  const declineEv = e.target.closest("[data-inbox-decline-event]");
+  if (declineEv) {
+    e.preventDefault();
+    const id = Number(declineEv.dataset.inboxDeclineEvent);
+    if (!Number.isNaN(id)) void declineEventInvitation(id);
+    return;
+  }
+  const acceptTk = e.target.closest("[data-inbox-accept-task]");
+  if (acceptTk) {
+    e.preventDefault();
+    const id = Number(acceptTk.dataset.inboxAcceptTask);
+    if (!Number.isNaN(id)) void acceptTaskInvitation(id);
+    return;
+  }
+  const declineTk = e.target.closest("[data-inbox-decline-task]");
+  if (declineTk) {
+    e.preventDefault();
+    const id = Number(declineTk.dataset.inboxDeclineTask);
+    if (!Number.isNaN(id)) void declineTaskInvitation(id);
+    return;
+  }
   const t = e.target.closest("[data-entity-link]");
   if (!t) return;
   const kind = t.dataset.entityLink;
@@ -2285,21 +2768,29 @@ async function onTaskCreate(event) {
     setFormError(form, "Выберите мероприятие");
     return;
   }
-  payload.assignee_id = payload.assignee_id ? Number(payload.assignee_id) : null;
+  const inviteUserId = el.taskCreateInviteSelect?.value ? Number(el.taskCreateInviteSelect.value) : null;
   payload.deadline = toIsoOrNull(payload.deadline);
   payload.start_time = toIsoOrNull(payload.start_time);
   payload.end_time = toIsoOrNull(payload.end_time);
 
   try {
-    await apiRequest(API.tasks, {
+    const created = await apiRequest(API.tasks, {
       method: "POST",
       body: JSON.stringify(payload)
     });
-    notify("Задача создана");
+    if (inviteUserId && created?.id) {
+      await apiRequest(`${API.tasks}${created.id}/assignees`, {
+        method: "POST",
+        body: JSON.stringify({ user_id: inviteUserId })
+      });
+      notify("Задача создана, приглашение исполнителю отправлено");
+    } else {
+      notify("Задача создана");
+    }
     form.reset();
     state.taskCreatePresetEventId = null;
     populateTaskEventOptions();
-    await loadAssigneeOptions(null);
+    await loadTaskCreateInviteOptions(null);
     await refreshData();
   } catch (error) {
     setFormError(form, `Ошибка создания задачи: ${error.message}`);
@@ -2310,7 +2801,7 @@ async function onTaskCreate(event) {
 async function onTaskEventChange(event) {
   const eventId = Number(event.target.value);
   state.taskCreatePresetEventId = Number.isNaN(eventId) || !eventId ? null : eventId;
-  await loadAssigneeOptions(state.taskCreatePresetEventId);
+  await loadTaskCreateInviteOptions(state.taskCreatePresetEventId);
 }
 
 async function onUsersSearchSubmit(event) {
@@ -2338,11 +2829,15 @@ async function onUsersListClick(event) {
   const role = roleSelect ? roleSelect.value : "viewer";
 
   try {
-    await apiRequest(`${API.events}${targetEventId}/participants`, {
+    const created = await apiRequest(`${API.events}${targetEventId}/participants`, {
       method: "POST",
       body: JSON.stringify({ user_id: userId, role })
     });
-    notify("Участник добавлен");
+    const msg =
+      created && String(created.membership_status || "").toLowerCase() === "pending"
+        ? "Приглашение в мероприятие отправлено"
+        : "Участник добавлен";
+    notify(msg);
   } catch (error) {
     notify(`Ошибка добавления участника: ${error.message}`, true);
   }
@@ -2516,8 +3011,7 @@ function gatherAiDraftTasksPayload() {
       start_time: start,
       end_time: end,
       deadline,
-      priority,
-      assignee_id: null
+      priority
     });
   });
   return out;

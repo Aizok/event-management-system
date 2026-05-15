@@ -14,6 +14,7 @@
         <button class="nav-item" data-screen="tasks">Задачи</button>
         <button class="nav-item" data-screen="resources">Ресурсы</button>
         <button class="nav-item" data-screen="users">Пользователи</button>
+        <button class="nav-item" data-screen="inbox">Входящие</button>
         <button class="nav-item" data-screen="ai">ИИ помощник</button>
       </nav>
 
@@ -123,9 +124,9 @@
                 <option value="">Выберите мероприятие</option>
               </select>
             </label>
-            <label>Исполнитель
-              <select name="assignee_id" id="task-assignee-select">
-                <option value="">Без исполнителя</option>
+            <label>Пригласить исполнителя (опционально)
+              <select id="task-create-invite-select">
+                <option value="">Не приглашать</option>
               </select>
             </label>
             <label>Приоритет
@@ -263,6 +264,18 @@
           </div>
           <p id="users-mode-hint" class="list-item-meta hidden"></p>
           <div id="users-list" class="list"></div>
+        </div>
+      </section>
+
+      <section id="inbox-screen" class="screen hidden">
+        <div class="panel">
+          <h2>Приглашения</h2>
+          <div class="detail-actions" style="margin-bottom:12px">
+            <button type="button" class="btn btn-muted btn-inline inbox-tab active" data-inbox-tab="incoming">Входящие</button>
+            <button type="button" class="btn btn-muted btn-inline inbox-tab" data-inbox-tab="outgoing">Исходящие</button>
+          </div>
+          <p id="inbox-hint" class="list-item-meta">Мероприятия и задачи, в которые вас пригласили и ожидают ответа.</p>
+          <div id="inbox-root" class="list"></div>
         </div>
       </section>
 

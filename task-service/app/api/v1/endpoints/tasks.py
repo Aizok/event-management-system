@@ -4,6 +4,7 @@ from typing import List
 from ....core.database import get_db
 from ....core.security import get_current_service, get_current_profile_id, get_current_user_data
 from ....crud.task import task_crud
+from ....crud.task_assignee import task_assignee_crud
 from ....schemas.task import (
     TaskCreate,
     TaskUpdate,
@@ -185,7 +186,7 @@ async def read_task(
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     if user_data.role != "admin":
-        await check_task_permissions(task, user_id)
+        await check_task_permissions(db, task, user_id)
     return task
 
 
@@ -234,9 +235,11 @@ async def update_task(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
     if user_data.role != "admin":
-        await check_task_permissions(old_task, user_id)
+        await check_task_permissions(db, old_task, user_id)
         role = await get_user_role_in_event(old_task.event_id, user_id)
-        is_executor_assignee = role == "executor" and old_task.assignee_id == user_id
+        is_executor_assignee = role == "executor" and await task_assignee_crud.is_accepted(
+            db, task_id, user_id
+        )
         if is_executor_assignee:
             changed_fields = set(task_in.model_dump(exclude_unset=True).keys())
             allowed_fields = {"status"}

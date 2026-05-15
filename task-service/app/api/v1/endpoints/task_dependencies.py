@@ -29,8 +29,8 @@ async def create_dependency(
             detail="Task not found"
         )
     if user_data.role != TokenRole.ADMIN:
-        await check_task_permissions(task, profile_id)
-        await check_task_permissions(depends_on, profile_id)
+        await check_task_permissions(db, task, profile_id)
+        await check_task_permissions(db, depends_on, profile_id)
 
     if task.event_id != depends_on.event_id:
         raise HTTPException(
@@ -82,7 +82,7 @@ async def get_dependencies(
             detail="Task not found"
         )
     if user_data.role != TokenRole.ADMIN:
-        await check_task_permissions(task, profile_id)
+        await check_task_permissions(db, task, profile_id)
 
     deps=await task_dependency_crud.get_dependencies(db, task_id)
     return deps
@@ -102,7 +102,7 @@ async def get_dependency_ids(
             detail="Task not found"
         )
     if user_data.role != TokenRole.ADMIN:
-        await check_task_permissions(task, profile_id)
+        await check_task_permissions(db, task, profile_id)
 
     deps=await task_dependency_crud.get_dependency_ids(db, task_id)
     return TaskDependencyListResponse(task_id=task_id, depends_on=deps)
@@ -123,7 +123,7 @@ async def delete_dependency(
             detail="Task not found"
         )
     if user_data.role != TokenRole.ADMIN:
-        await check_task_permissions(task, profile_id)
+        await check_task_permissions(db, task, profile_id)
     success=await task_dependency_crud.delete(db, task_id, depends_on_task_id)
     if not success:
         raise HTTPException(

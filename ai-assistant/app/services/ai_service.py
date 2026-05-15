@@ -170,7 +170,6 @@ def build_task_payload_with_timing(
             "end_time": end.isoformat(),
             "deadline": get_deadline(end, t.priority.value).isoformat(),
             "priority": t.priority.value,
-            "assignee_id": None
         }
         for (t, start, end) in result
     ]

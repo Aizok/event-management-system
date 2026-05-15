@@ -25,7 +25,7 @@ async def get_task_history(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
     if user_data.role != TokenRole.ADMIN:
-        await check_task_permissions(task, profile_id)
+        await check_task_permissions(db, task, profile_id)
     history=await task_history_crud.get_by_task(db, task_id)
     return history
 
@@ -42,7 +42,7 @@ async def delete_history(
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     if user_data.role != TokenRole.ADMIN:
-        await check_task_permissions(task, profile_id)
+        await check_task_permissions(db, task, profile_id)
 
     history=await task_history_crud.get(db, history_id)
     if not history:

@@ -9,6 +9,13 @@ class ParticipantRole(str, enum.Enum):
     EXECUTOR = "executor"
     VIEWER = "viewer"
 
+
+class MembershipStatus(str, enum.Enum):
+    PENDING = "pending"
+    ACTIVE = "active"
+    DECLINED = "declined"
+
+
 class EventParticipant(Base):
     __tablename__ = "event_participants"
 
@@ -18,6 +25,11 @@ class EventParticipant(Base):
     user_id: Mapped[int] = mapped_column(index=True)
 
     role: Mapped[ParticipantRole] = mapped_column(SAEnum(ParticipantRole), nullable=False)
+    membership_status: Mapped[MembershipStatus] = mapped_column(
+        SAEnum(MembershipStatus, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+        default=MembershipStatus.ACTIVE,
+    )
 
     event: Mapped["Event"] = relationship(
         "Event",

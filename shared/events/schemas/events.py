@@ -8,6 +8,7 @@ class EventType(str, Enum):
     TASK_CREATED = "TaskCreated"
     TASK_UPDATED = "TaskUpdated"
     TASK_ASSIGNED = "TaskAssigned"
+    TASK_ASSIGNEE_INVITED = "TaskAssigneeInvited"
     TASK_RESCHEDULED = "TaskRescheduled"
     TASK_COMPLETED = "TaskCompleted"
     EVENT_CREATED = "EventCreated"
@@ -28,6 +29,11 @@ class TaskCreated(BaseEvent):
 
 class TaskAssigned(BaseEvent):
     event_type: EventType = EventType.TASK_ASSIGNED
+
+
+class TaskAssigneeInvited(BaseEvent):
+    event_type: EventType = EventType.TASK_ASSIGNEE_INVITED
+
 
 class TaskUpdated(BaseEvent):
     event_type: EventType = EventType.TASK_UPDATED

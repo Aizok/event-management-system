@@ -4,7 +4,13 @@ from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.events.producer import EventProducer
-from shared.events.schemas.events import TaskCreated, TaskUpdated, TaskAssigned, TaskRescheduled
+from shared.events.schemas.events import (
+    TaskCreated,
+    TaskUpdated,
+    TaskAssigned,
+    TaskRescheduled,
+    TaskAssigneeInvited,
+)
 from .database import get_db
 from ..crud.task import task_crud
 from ..models.task import TaskStatus, TaskPriority
@@ -25,7 +31,6 @@ async def publish_task_created(db: AsyncSession, task_id: int):
                 "title": task.title,
                 "description": getattr(task, 'description', None),
                 "owner_id": task.owner_id,
-                "assignee_id": getattr(task, 'assignee_id', None),
                 "status": getattr(task, 'status', TaskStatus.TODO.value),
                 "priority": getattr(task, 'priority', TaskPriority.MEDIUM.value),
                 "deadline": str(deadline) if deadline else None
@@ -33,21 +38,6 @@ async def publish_task_created(db: AsyncSession, task_id: int):
         )
         await producer.publish(event)
         logger.info(f"TaskCreated(id={task_id}):  {event.data['title']}")
-
-        if task.assignee_id:
-            assigned_event=TaskAssigned(
-                source_service="task-service",
-                source_entity_id=task_id,
-                data={
-                    "assignee_id": task.assignee_id,
-                    "owner_id": task.owner_id,
-                    "title": task.title
-                }
-            )
-            await producer.publish(assigned_event)
-            logger.info(
-                f"TaskAssigned(id={task_id}): assignee={task.assignee_id}"
-            )
 
 
 async def publish_task_updated(
@@ -71,21 +61,49 @@ async def publish_task_updated(
         await producer.publish(event)
         logger.info(f"Task Updated (id={task_id}): {changes}")
 
-        if "assignee_id" in changes and changes["assignee_id"] is not None:
-            assigned_event = TaskAssigned(
-                source_service="task-service",
-                source_entity_id=task_id,
-                data={
-                    "assignee_id": changes["assignee_id"],
-                    "owner_id": task.owner_id,
-                    "title": task.title
-                }
-            )
 
-            await producer.publish(assigned_event)
-            logger.info(
-                f"TaskAssigned (id={task_id}): assignee={changes['assignee_id']}"
-            )
+async def publish_task_assignee_invited(
+    db: AsyncSession, task_id: int, invitee_user_ids: list[int]
+):
+    """Уведомления о приглашении исполнителя (строка task_assignees со статусом pending)."""
+    if not invitee_user_ids:
+        return
+    task = await task_crud.get(db, task_id)
+    if not task:
+        return
+    event = TaskAssigneeInvited(
+        source_service="task-service",
+        source_entity_id=task_id,
+        data={
+            "invitee_ids": invitee_user_ids,
+            "owner_id": task.owner_id,
+            "title": task.title,
+            "event_id": task.event_id,
+        },
+    )
+    await producer.publish(event)
+    logger.info(
+        f"TaskAssigneeInvited(id={task_id}): invitees={invitee_user_ids}"
+    )
+
+
+async def publish_task_assigned_accept(
+    db: AsyncSession, task_id: int, assignee_id: int
+):
+    task = await task_crud.get(db, task_id)
+    if not task or not assignee_id:
+        return
+    assigned_event = TaskAssigned(
+        source_service="task-service",
+        source_entity_id=task_id,
+        data={
+            "assignee_id": assignee_id,
+            "owner_id": task.owner_id,
+            "title": task.title,
+        },
+    )
+    await producer.publish(assigned_event)
+    logger.info(f"TaskAssigned after accept (id={task_id}): assignee={assignee_id}")
 
 
 async def publish_task_rescheduled(db: AsyncSession, task_id: int):

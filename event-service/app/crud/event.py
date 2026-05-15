@@ -2,7 +2,7 @@ from sqlalchemy import select, func, update, delete, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from ..models.event import Event
-from ..models.event_participant import EventParticipant
+from ..models.event_participant import EventParticipant, MembershipStatus
 from ..schemas.event import EventCreate, EventUpdate
 from .event_participant import event_participant_crud, ParticipantRole
 
@@ -48,7 +48,10 @@ class EventCRUD:
         query=(
             select(Event)
             .join(EventParticipant, Event.id==EventParticipant.event_id)
-            .where(EventParticipant.user_id==user_id)
+            .where(
+                EventParticipant.user_id==user_id,
+                EventParticipant.membership_status == MembershipStatus.ACTIVE,
+            )
             .order_by(Event.created_at.desc())
         )
         result=await db.execute(query)
@@ -59,7 +62,10 @@ class EventCRUD:
         query = (
             select(Event.id, EventParticipant.role)
             .join(EventParticipant, Event.id == EventParticipant.event_id)
-            .where(EventParticipant.user_id == user_id)
+            .where(
+                EventParticipant.user_id == user_id,
+                EventParticipant.membership_status == MembershipStatus.ACTIVE,
+            )
             .order_by(Event.created_at.desc())
         )
         result = await db.execute(query)

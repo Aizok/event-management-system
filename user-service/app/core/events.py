@@ -16,7 +16,7 @@ async def handle_task_created(event: BaseEvent):
     logger.info(f"Task Created received: task_id={task_id}, event_id={event_id}, title='{event.data.get('title')}'")
 
     task_data=event.data
-    user_id=task_data.get("assignee_id") or task_data.get("owner_id")
+    user_id=task_data.get("owner_id")
 
     if user_id:
         # TODO: 1. Найти пользователя в БД

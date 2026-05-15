@@ -7,8 +7,12 @@ WORKDIR /app
 COPY shared/ /app/shared/
 COPY task-service/ .
 
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir psycopg2-binary
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=180
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --retries=10 --default-timeout=180 -r requirements.txt && \
+    pip install --retries=10 --default-timeout=180 psycopg2-binary
 
 EXPOSE 8004
 

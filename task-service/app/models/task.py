@@ -43,7 +43,6 @@ class Task(Base):
 
     event_id: Mapped[int]=mapped_column(Integer, nullable=False, index=True)
     owner_id: Mapped[int]=mapped_column(Integer, nullable=False, index=True)
-    assignee_id: Mapped[int | None]=mapped_column(Integer, nullable=True, index=True)
 
     dependencies: Mapped[list["TaskDependency"]]=relationship(
         "TaskDependency",
@@ -63,4 +62,11 @@ class Task(Base):
         "TaskHistory",
         back_populates="task",
         cascade="all, delete-orphan"
+    )
+
+    assignees: Mapped[list["TaskAssignee"]] = relationship(
+        "TaskAssignee",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )

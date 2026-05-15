@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from .api.v1.endpoints import tasks
+from .api.v1.endpoints import task_assignees
 from .api.v1.endpoints import task_dependencies
 from .api.v1.endpoints import task_history
 from .core.config import settings
@@ -43,6 +44,7 @@ app=FastAPI(
     lifespan=lifespan
 )
 
+app.include_router(task_assignees.router, prefix="/api/tasks", tags=["task-assignees"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(task_dependencies.router, prefix="/api/tasks", tags=["task-dependencies"])
 app.include_router(task_history.router, prefix="/api/tasks", tags=["task-history"])

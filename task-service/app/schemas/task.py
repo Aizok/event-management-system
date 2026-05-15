@@ -5,6 +5,41 @@ from typing import Optional, List
 from datetime import datetime
 from ..models.task import TaskStatus, TaskPriority
 
+
+class TaskAssigneeResponse(BaseModel):
+    user_id: int
+    status: str
+    invited_by: Optional[int] = None
+    created_at: Optional[datetime] = None
+    responded_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
+
+class TaskAssigneeInvitationItem(BaseModel):
+    task_id: int
+    event_id: int
+    title: str
+    invited_by: Optional[int] = None
+    created_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskSentInvitationItem(BaseModel):
+    task_id: int
+    event_id: int
+    title: str
+    invitee_user_id: int
+    created_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskAssigneeInvite(BaseModel):
+    user_id: int = Field(..., gt=0)
+
+
 class TaskBase(BaseModel):
     title: str=Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
@@ -12,7 +47,6 @@ class TaskBase(BaseModel):
 
 class TaskCreate(TaskBase):
     event_id: int
-    assignee_id: Optional[int] = None
     priority: TaskPriority=TaskPriority.MEDIUM
     deadline: datetime
     start_time: datetime
@@ -25,7 +59,6 @@ class TaskUpdate(BaseModel):
     description: Optional[str]=None
     status: Optional[TaskStatus]=None
     priority: Optional[TaskPriority]=None
-    assignee_id: Optional[int] = None
     deadline: Optional[datetime] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
@@ -46,7 +79,7 @@ class TaskResponse(BaseModel):
     updated_at: Optional[datetime]
     event_id: int
     owner_id: int
-    assignee_id: Optional[int]
+    assignees: List[TaskAssigneeResponse] = Field(default_factory=list)
 
     is_late_start: bool = False
 

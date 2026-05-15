@@ -13,7 +13,7 @@ async def get_current_participant(
         db: AsyncSession=Depends(get_db),
         user_id: int=Depends(get_current_profile_id)
 ) -> EventParticipant:
-    participant=await event_participant_crud.get_participant(db, event.id, user_id)
+    participant=await event_participant_crud.get_active_participant(db, event.id, user_id)
     if not participant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

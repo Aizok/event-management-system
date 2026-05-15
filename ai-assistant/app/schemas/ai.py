@@ -60,7 +60,6 @@ class ProposedTask(BaseModel):
     end_time: datetime
     deadline: datetime
     priority: TaskPriority = TaskPriority.MEDIUM
-    assignee_id: Optional[int] = None
 
     @field_validator("priority", mode="before")
     @classmethod
