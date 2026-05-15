@@ -1,12 +1,12 @@
 :root {
-  --bg: #f4f0e8;
-  --surface: #fefcf7;
-  --surface-strong: #f9f4ea;
-  --text: #1f1f1f;
-  --muted: #6d6962;
-  --line: #e7decc;
+  --bg: #eef2f7;
+  --surface: #ffffff;
+  --surface-strong: #f0f6fc;
+  --text: #1a2332;
+  --muted: #5c6b7a;
+  --line: #dbe4f0;
   --accent: #2d5bff;
-  --accent-soft: #edf1ff;
+  --accent-soft: #e8f2ff;
   --danger: #b33a3a;
   --radius: 16px;
 }
@@ -63,7 +63,7 @@ body {
 }
 
 .nav-item.active {
-  border-color: #d7dbf8;
+  border-color: #c5d9f5;
   background: var(--accent-soft);
   color: #1a35b8;
 }
@@ -236,7 +236,7 @@ body {
 }
 
 .auth-tab.active {
-  background: #fff;
+  background: var(--surface);
   color: var(--text);
   border: 1px solid var(--line);
 }
@@ -270,7 +270,7 @@ select {
   border-radius: 10px;
   padding: 10px 11px;
   font: inherit;
-  background: #fff;
+  background: var(--surface);
   color: var(--text);
 }
 
@@ -280,7 +280,7 @@ textarea {
 }
 
 .btn {
-  border: 1px solid #1846eb;
+  border: 1px solid #2450e6;
   background: var(--accent);
   color: white;
   border-radius: 11px;
@@ -296,7 +296,7 @@ textarea {
 .btn-muted {
   width: 100%;
   border-color: var(--line);
-  background: #fff;
+  background: var(--surface);
   color: var(--text);
 }
 
@@ -372,7 +372,7 @@ textarea {
 .list-item {
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: #fff;
+  background: var(--surface);
   padding: 10px 12px;
 }
 
@@ -414,7 +414,7 @@ textarea {
 }
 
 .badge-danger {
-  background: #ffe9e9;
+  background: #fee8e8;
   color: var(--danger);
 }
 
@@ -431,7 +431,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 10px;
-  background: #fff;
+  background: var(--surface);
 }
 
 .event-vertical-axis,
@@ -528,7 +528,7 @@ textarea {
 }
 
 .inbox-tab.active {
-  border-color: #d7dbf8;
+  border-color: #c5d9f5;
   background: var(--accent-soft);
   color: #1a35b8;
 }
