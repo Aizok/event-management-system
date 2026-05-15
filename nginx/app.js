@@ -1835,29 +1835,29 @@ function renderEventDetailCard(
           )
           .join("");
 
-  const leaveSection = canLeaveEvent
-    ? `
-    <div class="panel">
-      <div class="detail-actions">
-        <button type="button" class="btn btn-danger btn-inline" data-event-leave-participant="${event.id}">Покинуть мероприятие</button>
-      </div>
-    </div>`
-    : "";
-
   const canDeleteEvent =
     state.role === "admin" ||
     (state.profileId != null && Number(state.profileId) === Number(event.owner_id));
 
-  const editSection = canManage
+  const manageButtonsHtml = canManage
     ? `
-    <div class="panel">
-      <div class="detail-actions">
         <button type="button" class="btn btn-muted btn-inline" id="event-toggle-edit-btn">Редактировать</button>
         <button type="button" class="btn btn-muted btn-inline" id="event-open-users-btn">+ Добавить участника</button>
         <button type="button" class="btn btn-muted btn-inline" id="event-open-task-create-btn">+ Создать задачу</button>
         <button type="button" class="btn btn-muted btn-inline" id="event-open-resource-create-btn">+ Создать ресурс</button>
-        <button type="button" class="btn btn-muted btn-inline" id="event-open-allocation-btn">+ Создать назначение ресурса</button>
-      </div>
+        <button type="button" class="btn btn-muted btn-inline" id="event-open-allocation-btn">+ Создать назначение ресурса</button>`
+    : "";
+
+  const deleteButtonHtml = canDeleteEvent
+    ? `<button type="button" class="btn btn-danger btn-inline" id="event-delete-btn">Удалить мероприятие</button>`
+    : "";
+
+  const leaveButtonHtml = canLeaveEvent
+    ? `<button type="button" class="btn btn-danger btn-inline" data-event-leave-participant="${event.id}">Покинуть мероприятие</button>`
+    : "";
+
+  const editFormHtml = canManage
+    ? `
       <div id="event-edit-section" class="hidden" style="margin-top:12px">
         <h3>Редактирование</h3>
         <form id="event-edit-form" class="grid-form">
@@ -1880,18 +1880,21 @@ function renderEventDetailCard(
         <div class="detail-actions" style="margin-top:12px">
           <button type="button" class="btn btn-muted btn-inline" id="event-cancel-edit-btn">Отмена</button>
         </div>
-      </div>
-    </div>`
+      </div>`
     : "";
 
-  const deleteSection = canDeleteEvent
-    ? `
+  const actionsSection =
+    canManage || canLeaveEvent || canDeleteEvent
+      ? `
     <div class="panel">
       <div class="detail-actions">
-        <button type="button" class="btn btn-danger" id="event-delete-btn">Удалить мероприятие</button>
+        ${manageButtonsHtml}
+        ${deleteButtonHtml}
+        ${leaveButtonHtml}
       </div>
+      ${editFormHtml}
     </div>`
-    : "";
+      : "";
 
   const eventDepsEditorBlock =
     canManage && tasks.length > 0 ? buildEventDependenciesEditor(tasks, depMap, event.id) : "";
@@ -1910,9 +1913,7 @@ function renderEventDetailCard(
       </dl>
       <p class="list-item-meta" style="margin-top:12px">${escapeHtml(event.description || "Без описания")}</p>
     </div>
-    ${leaveSection}
-    ${editSection}
-    ${deleteSection}
+    ${actionsSection}
     <div class="panel">
       <h3>Участники мероприятия</h3>
       ${participantsBlock}
