@@ -1,20 +1,28 @@
 import enum
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import Optional
 from datetime import datetime
 from ..models.notification import NotificationType, NotificationStatus
 
 class NotificationBase(BaseModel):
-    task_id: int=Field(..., gt=0) # Из события TaskCreated
-    recipient_id: int=Field(..., gt=0) # Из события assignee_id
-    initiator_id: int=Field(..., gt=0)
-    type: NotificationType=NotificationType.EMAIL
-    title: str=Field(..., max_length=255)
+    task_id: Optional[int] = Field(None, gt=0)
+    event_id: Optional[int] = Field(None, gt=0)
+    recipient_id: int = Field(..., gt=0)
+    initiator_id: int = Field(..., gt=0)
+    type: NotificationType = NotificationType.EMAIL
+    title: str = Field(..., max_length=255)
+
+    @model_validator(mode="after")
+    def require_task_or_event(self):
+        if self.task_id is None and self.event_id is None:
+            raise ValueError("Either task_id or event_id must be set")
+        return self
+
 
 # Создание (Consumer)
 class NotificationCreate(NotificationBase):
-    message: Optional[str]=Field(None, max_length=5000)
+    message: Optional[str] = Field(None, max_length=5000)
 
 
 class NotificationResponse(NotificationBase):

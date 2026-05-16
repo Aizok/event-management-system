@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
 
+    RABBITMQ_URL: str
+
     PROJECT_NAME: str="Event Service"
     VERSION: str="1.0.0"
 

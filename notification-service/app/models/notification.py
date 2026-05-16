@@ -22,7 +22,8 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    task_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
+    task_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
+    event_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
     recipient_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     initiator_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
 

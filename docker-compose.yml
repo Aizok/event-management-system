@@ -217,8 +217,11 @@ services:
       - ./event-service/.env
     environment:
       - DATABASE_URL=postgresql://event_user:event_password@postgres_events:5432/events_db
+      - RABBITMQ_URL=amqp://admin:admin_password@rabbitmq:5672/
     depends_on:
       postgres_events:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     volumes:
       - ./shared:/app/shared:ro

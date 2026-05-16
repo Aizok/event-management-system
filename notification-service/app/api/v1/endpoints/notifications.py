@@ -8,7 +8,6 @@ from ....crud.notification import notification_crud
 from ....schemas.notification import NotificationCreate, NotificationResponse, NotificationStatus
 
 from ....core.user_client import get_user_email
-from ....core.email import send_email
 
 from datetime import datetime, timezone
 import logging

@@ -22,6 +22,7 @@ from ....api.dependencies.participant import get_current_participant, get_curren
 from ....core.user_client import get_user_profile_id
 from ....core.user_client import get_auth_user_id_by_profile_id
 from ....core.auth_client import get_user_role
+from ....core.events import publish_event_participant_invited
 
 ALLOWED_SERVICES={"task-service", "resource-service"}
 
@@ -243,6 +244,13 @@ async def create_participant(
             existing.membership_status = MembershipStatus.PENDING
             await db.commit()
             await db.refresh(existing)
+            await publish_event_participant_invited(
+                db,
+                event_id=event_id,
+                invitee_id=participant_in.user_id,
+                inviter_id=current_profile_id,
+                role=participant_in.role.value,
+            )
             return existing
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -266,13 +274,21 @@ async def create_participant(
             )
 
     try:
-        return await event_participant_crud.create_participant(
+        participant = await event_participant_crud.create_participant(
             db,
             event_id=event_id,
             user_id=participant_in.user_id,
             role=participant_in.role,
             membership_status=MembershipStatus.PENDING,
         )
+        await publish_event_participant_invited(
+            db,
+            event_id=event_id,
+            invitee_id=participant_in.user_id,
+            inviter_id=current_profile_id,
+            role=participant_in.role.value,
+        )
+        return participant
     except ValueError as e:
         if str(e) == "duplicate_participant":
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Duplicate participant")

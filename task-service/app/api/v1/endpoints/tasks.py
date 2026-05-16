@@ -322,8 +322,9 @@ async def update_task(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     """Формирование изменений"""
-    changes=task_in.model_dump(exclude_unset=True)
-    changes['previous_status']=previous_status
+    changes = task_in.model_dump(exclude_unset=True)
+    changes["previous_status"] = previous_status
+    changes["updated_by"] = user_id
 
     """Отправка события TaskUpdated"""
     await publish_task_updated(db, task.id, changes)

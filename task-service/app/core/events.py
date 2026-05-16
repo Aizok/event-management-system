@@ -13,7 +13,9 @@ from shared.events.schemas.events import (
 )
 from .database import get_db
 from ..crud.task import task_crud
+from ..crud.task_assignee import task_assignee_crud
 from ..models.task import TaskStatus, TaskPriority
+from ..models.task_assignee import TaskAssigneeStatus
 
 logger=logging.getLogger(__name__)
 
@@ -45,21 +47,32 @@ async def publish_task_updated(
         task_id: int,
         changes: Dict[str, Any]
 ):
-    task=await task_crud.get(db, task_id)
-    if task:
-        event_data={
-            "previous_status": changes.get('previous_status'),
-            **changes,
-            "owner_id": task.owner_id
-        }
+    task = await task_crud.get(db, task_id)
+    if not task:
+        return
 
-        event=TaskUpdated(
-            source_service="task-service",
-            source_entity_id=task_id,
-            data=event_data
-        )
-        await producer.publish(event)
-        logger.info(f"Task Updated (id={task_id}): {changes}")
+    assignee_rows = await task_assignee_crud.list_for_task(db, task_id)
+    assignee_ids = [
+        a.user_id
+        for a in assignee_rows
+        if a.status == TaskAssigneeStatus.ACCEPTED
+    ]
+
+    event_data = {
+        "previous_status": changes.get("previous_status"),
+        **changes,
+        "owner_id": task.owner_id,
+        "title": task.title,
+        "assignee_ids": assignee_ids,
+    }
+
+    event = TaskUpdated(
+        source_service="task-service",
+        source_entity_id=task_id,
+        data=event_data,
+    )
+    await producer.publish(event)
+    logger.info(f"Task Updated (id={task_id}): {changes}")
 
 
 async def publish_task_assignee_invited(
