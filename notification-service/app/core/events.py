@@ -25,6 +25,17 @@ _TASK_UPDATE_META_KEYS = frozenset(
     }
 )
 
+_PARTICIPANT_ROLE_LABELS = {
+    "owner": "Владелец",
+    "organizer": "Организатор",
+    "executor": "Исполнитель",
+    "viewer": "Наблюдатель",
+}
+
+
+def _participant_role_label(role: str) -> str:
+    return _PARTICIPANT_ROLE_LABELS.get(str(role or "").lower(), role or "—")
+
 
 async def _send_notification_email(
     *,
@@ -108,13 +119,13 @@ async def _notify_event_recipient(
         await _send_notification_email(db=db, notification=notification)
 
 
-def _format_task_update_message(task_id: int, title: str, event_data: dict) -> str:
+def _format_task_update_message(title: str, event_data: dict) -> str:
     changed = [
         key
         for key in event_data
         if key not in _TASK_UPDATE_META_KEYS
     ]
-    body = f"Задача #{task_id} «{title}» обновлена."
+    body = f"Задача «{title}» обновлена."
     if changed:
         body += f" Изменены поля: {', '.join(changed)}."
     return body
@@ -137,7 +148,7 @@ async def handle_task_assigned(event: BaseEvent):
             recipient_id=recipient_id,
             initiator_id=initiator_id,
             notification_title=f"Новая задача '{title}'",
-            message=f"Задача #{task_id}: {title}",
+            message=f"Вам назначена задача «{title}».",
         )
     else:
         logger.warning(f"No assignee_id for task {task_id}")
@@ -162,7 +173,7 @@ async def handle_task_assignee_invited(event: BaseEvent):
             recipient_id=int(recipient_id),
             initiator_id=initiator_id,
             notification_title=f"Новая задача '{title}'",
-            message=f"Приглашение исполнителем по задаче #{task_id}: {title}",
+            message=f"Вас пригласили исполнителем по задаче «{title}».",
         )
 
 
@@ -178,7 +189,7 @@ async def handle_task_updated(event: BaseEvent):
         f"TaskUpdated: task_id={task_id}, assignee_ids={assignee_ids}, updated_by={updated_by}"
     )
 
-    message = _format_task_update_message(task_id, title, task_data)
+    message = _format_task_update_message(title, task_data)
     notification_title = f"Задача обновлена: '{title}'"
 
     for recipient_id in assignee_ids:
@@ -201,7 +212,7 @@ async def handle_event_participant_invited(event: BaseEvent):
     data = event.data
     recipient_id = data.get("invitee_id")
     initiator_id = data.get("inviter_id")
-    title = data.get("title") or f"Мероприятие #{event_id}"
+    title = data.get("title") or "Мероприятие"
     role = data.get("role") or ""
     start_time = data.get("start_time") or ""
     end_time = data.get("end_time") or ""
@@ -217,8 +228,8 @@ async def handle_event_participant_invited(event: BaseEvent):
 
     location_line = f"Место: {location}\n" if location and location != "—" else ""
     message = (
-        f"Вас пригласили в мероприятие #{event_id} «{title}».\n"
-        f"Роль: {role}\n"
+        f"Вас пригласили в мероприятие «{title}».\n"
+        f"Роль: {_participant_role_label(role)}\n"
         f"Период: {start_time} — {end_time}\n"
         f"{location_line}"
         f"Примите или отклоните приглашение в личном кабинете."
