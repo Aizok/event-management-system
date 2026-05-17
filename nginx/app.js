@@ -363,14 +363,15 @@ function buildTaskScheduleDeviationHtml(task) {
 }
 
 function renderTaskInlineBadges(task) {
-  const overdueExtra =
-    task.status === "overdue" ? '<span class="badge badge-danger">Просрочено</span>' : "";
+  const statusBadge =
+    task.status === "overdue"
+      ? `<span class="badge badge-danger">${enumLabel("taskStatus", task.status)}</span>`
+      : `<span class="badge">${enumLabel("taskStatus", task.status)}</span>`;
   const lateStartBadge = task.is_late_start
     ? '<span class="badge badge-warning">Поздний старт</span>'
     : "";
-  return `<span class="badge">${enumLabel("taskStatus", task.status)}</span>
+  return `${statusBadge}
     <span class="badge">${enumLabel("taskPriority", task.priority)}</span>
-    ${overdueExtra}
     ${lateStartBadge}`;
 }
 
