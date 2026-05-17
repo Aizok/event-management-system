@@ -99,6 +99,8 @@ class TaskResponse(BaseModel):
     assignees: List[TaskAssigneeResponse] = Field(default_factory=list)
 
     is_late_start: bool = False
+    start_delay_seconds: Optional[int] = None
+    end_delay_seconds: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 

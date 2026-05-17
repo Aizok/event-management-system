@@ -320,6 +320,60 @@ function formatDateTime(iso) {
   return d.toLocaleString();
 }
 
+function formatScheduleDelta(seconds) {
+  if (seconds == null || Number.isNaN(Number(seconds))) return "—";
+  const n = Number(seconds);
+  if (n === 0) return "без отклонения";
+  const sign = n > 0 ? "+" : "−";
+  const abs = Math.abs(n);
+  const days = Math.floor(abs / 86400);
+  const hours = Math.floor((abs % 86400) / 3600);
+  const mins = Math.floor((abs % 3600) / 60);
+  const parts = [];
+  if (days) parts.push(`${days} д`);
+  if (hours) parts.push(`${hours} ч`);
+  if (mins || parts.length === 0) parts.push(`${mins} мин`);
+  return `${sign}${parts.join(" ")}`;
+}
+
+function buildTaskScheduleDeviationHtml(task) {
+  const lateStartBadge = task.is_late_start
+    ? ' <span class="badge badge-warning">Поздний старт</span>'
+    : "";
+  let startDeviationRow = "";
+  if (task.start_delay_seconds != null) {
+    startDeviationRow = `<dt>Отклонение старта</dt><dd>${formatScheduleDelta(task.start_delay_seconds)}${lateStartBadge} <span class="list-item-meta">(поздний старт — с допуском 5 мин)</span></dd>`;
+  }
+  let endDeviationRow = "";
+  if (task.end_delay_seconds != null) {
+    const endSec = Number(task.end_delay_seconds);
+    const endBadge =
+      endSec > 0
+        ? ' <span class="badge badge-warning">Позже плана</span>'
+        : endSec < 0
+          ? ' <span class="badge">Раньше плана</span>'
+          : "";
+    endDeviationRow = `<dt>Отклонение окончания</dt><dd>${formatScheduleDelta(task.end_delay_seconds)}${endBadge}</dd>`;
+  }
+  return `
+        <dt>План</dt><dd>${formatDateTime(task.start_time)} — ${formatDateTime(task.end_time)}</dd>
+        <dt>Факт</dt><dd>${formatDateTime(task.actual_start_time)} — ${formatDateTime(task.actual_end_time)}</dd>
+        ${startDeviationRow}
+        ${endDeviationRow}`;
+}
+
+function renderTaskInlineBadges(task) {
+  const overdueExtra =
+    task.status === "overdue" ? '<span class="badge badge-danger">Просрочено</span>' : "";
+  const lateStartBadge = task.is_late_start
+    ? '<span class="badge badge-warning">Поздний старт</span>'
+    : "";
+  return `<span class="badge">${enumLabel("taskStatus", task.status)}</span>
+    <span class="badge">${enumLabel("taskPriority", task.priority)}</span>
+    ${overdueExtra}
+    ${lateStartBadge}`;
+}
+
 function setFormError(form, message = "") {
   if (!form) return;
   let node = form.querySelector(".form-error");
@@ -1009,9 +1063,7 @@ function renderTasks() {
       <button type="button" class="entity-link" data-entity-link="task" data-id="${task.id}">
         ${escapeHtml(task.title)}
       </button>
-      <span class="badge">${enumLabel("taskStatus", task.status)}</span>
-      <span class="badge">${enumLabel("taskPriority", task.priority)}</span>
-      ${task.status === "overdue" ? '<span class="badge badge-danger">Просрочено</span>' : ""}
+      ${renderTaskInlineBadges(task)}
     </p>
     <p class="list-item-meta">Мероприятие: ${eventTitle} | Исполнитель: ${assigneeLabel}</p>
     <p class="list-item-meta">План: ${formatDateTime(task.start_time)} — ${formatDateTime(task.end_time)}</p>
@@ -1785,8 +1837,7 @@ function renderEventDetailCard(
             <button type="button" class="entity-link" data-entity-link="task" data-id="${t.id}" data-return-event="${event.id}">
               ${escapeHtml(t.title)}
             </button>
-            <span class="badge">${enumLabel("taskStatus", t.status)}</span>
-            <span class="badge">${enumLabel("taskPriority", t.priority)}</span>
+            ${renderTaskInlineBadges(t)}
             </span>
             ${deleteBtn}
           </p>
@@ -2444,12 +2495,12 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
       <p class="list-item-meta">Мероприятие: <button type="button" class="entity-link" data-entity-link="event" data-id="${task.event_id}">${escapeHtml(eventTitle)}</button></p>
       <dl class="detail-dl">
         <dt>ID</dt><dd>${task.id}</dd>
-        <dt>Статус</dt><dd>${enumLabel("taskStatus", task.status)}</dd>
+        <dt>Статус</dt><dd>${enumLabel("taskStatus", task.status)}${task.is_late_start ? ' <span class="badge badge-warning">Поздний старт</span>' : ""}</dd>
         <dt>Приоритет</dt><dd>${enumLabel("taskPriority", task.priority)}</dd>
         <dt>Исполнители</dt><dd>${assigneesSummary}</dd>
         <dt>Владелец</dt><dd>${ownerDd}</dd>
-        <dt>Дедлайн</dt><dd>${new Date(task.deadline).toLocaleString()}</dd>
-        <dt>План: старт — окончание</dt><dd>${new Date(task.start_time).toLocaleString()} — ${new Date(task.end_time).toLocaleString()}</dd>
+        <dt>Дедлайн</dt><dd>${formatDateTime(task.deadline)}</dd>
+        ${buildTaskScheduleDeviationHtml(task)}
       </dl>
       <p class="list-item-meta" style="margin-top:12px">${escapeHtml(task.description || "Без описания")}</p>
     </div>

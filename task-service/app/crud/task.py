@@ -17,6 +17,20 @@ def is_late_start(task: Task):
     return task.actual_start_time > task.start_time + START_GRACE_PERIOD
 
 
+def start_delay(task: Task) -> timedelta | None:
+    if not task.actual_start_time:
+        return None
+    return task.actual_start_time - task.start_time
+
+
+def _enrich_task_schedule(task: Task) -> None:
+    task.is_late_start = is_late_start(task)
+    sd = start_delay(task)
+    task.start_delay_seconds = int(sd.total_seconds()) if sd is not None else None
+    ed = calculate_delay(task)
+    task.end_delay_seconds = int(ed.total_seconds()) if ed is not None else None
+
+
 def serialize(value):
     if isinstance(value, datetime):
         return value.isoformat()
@@ -69,7 +83,7 @@ class TaskCRUD:
         task=result.scalar_one_or_none()
 
         if task:
-            task.is_late_start=is_late_start(task)
+            _enrich_task_schedule(task)
         return task
 
 
@@ -83,7 +97,7 @@ class TaskCRUD:
         result = await db.execute(query)
         tasks = result.scalars().all()
         for task in tasks:
-            task.is_late_start=is_late_start(task)
+            _enrich_task_schedule(task)
         return tasks
 
 
@@ -92,7 +106,7 @@ class TaskCRUD:
         result=await db.execute(query)
         tasks = result.scalars().all()
         for task in tasks:
-            task.is_late_start=is_late_start(task)
+            _enrich_task_schedule(task)
         return tasks
 
 
@@ -113,7 +127,7 @@ class TaskCRUD:
         tasks=result.scalars().all()
 
         for task in tasks:
-            task.is_late_start=is_late_start(task)
+            _enrich_task_schedule(task)
 
         return tasks
 
@@ -135,7 +149,7 @@ class TaskCRUD:
         tasks = result.scalars().all()
 
         for task in tasks:
-            task.is_late_start = is_late_start(task)
+            _enrich_task_schedule(task)
 
         return tasks
 
@@ -157,7 +171,7 @@ class TaskCRUD:
         result = await db.execute(query)
         tasks = result.scalars().all()
         for task in tasks:
-            task.is_late_start = is_late_start(task)
+            _enrich_task_schedule(task)
         return tasks
 
 
@@ -172,7 +186,7 @@ class TaskCRUD:
         result=await db.execute(query)
         tasks = result.scalars().all()
         for task in tasks:
-            task.is_late_start = is_late_start(task)
+            _enrich_task_schedule(task)
         return tasks
 
 
@@ -473,7 +487,7 @@ class TaskCRUD:
         result = await db.execute(stmt)
         tasks = result.scalars().all()
         for task in tasks:
-            task.is_late_start = is_late_start(task)
+            _enrich_task_schedule(task)
         return tasks
 
     async def metrics_accessible_tasks(
