@@ -251,6 +251,119 @@ function taskDetailMode(task) {
   return "read";
 }
 
+const API_ERROR_MESSAGES_RU = {
+  "User already participant": "Пользователь уже участник этого мероприятия",
+  "Duplicate participant": "Участник с такими данными уже существует",
+  "Participant not found": "Участник не найден",
+  "Event not found": "Мероприятие не найдено",
+  "Not enough permissions": "Недостаточно прав для выполнения операции",
+  "Not allowed": "Операция не разрешена",
+  "Cannot assign OWNER role": "Нельзя назначить роль владельца",
+  "System viewer can only be added with event role viewer": "Системный наблюдатель может быть только наблюдателем мероприятия",
+  "System executor cannot be assigned as event organizer": "Системный исполнитель не может быть организатором мероприятия",
+  "Use decline to reject a pending invitation": "Для отклонения приглашения используйте «Отклонить»",
+  "Owner cannot leave the event": "Владелец не может покинуть мероприятие",
+  "No pending invitation to accept": "Нет приглашения для принятия",
+  "No pending invitation to decline": "Нет приглашения для отклонения",
+  "User is not a participant of this event": "Пользователь не является участником этого мероприятия",
+  "Only owner allowed": "Доступно только владельцу мероприятия",
+  "Pending invitation not found": "Приглашение не найдено",
+  "Owner cannot remove themselves": "Владелец не может удалить себя из участников",
+  "Only admin and organizer can create events": "Создавать мероприятия могут только администратор и организатор",
+  "Only the event owner can delete this event": "Удалить мероприятие может только его владелец",
+  "Task not found": "Задача не найдена",
+  "Tasks must belong to same event": "Задачи должны относиться к одному мероприятию",
+  "Task cannot depend on itself": "Задача не может зависеть от самой себя",
+  "Dependency cycle detected": "Нельзя добавить зависимость: получится цикл",
+  "Dependency already exists": "Такая зависимость уже существует",
+  "Dependent task planned start must be on or after predecessor planned end":
+    "Плановое начало зависимой задачи должно быть не раньше планового окончания предшественника",
+  "Dependency not found": "Зависимость не найдена",
+  "dependency_cycle": "Нельзя добавить зависимость: получится цикл",
+  "self_dependency": "Задача не может зависеть от самой себя",
+  "duplicate_dependency": "Такая зависимость уже существует",
+  "invalid_dependency_order": "Неверный порядок зависимостей между задачами",
+  "Task is blocked by unfinished dependencies": "Задача заблокирована незавершёнными зависимостями",
+  "Executors can only change status": "Исполнитель может менять только статус задачи",
+  "Executors can only set status to in_progress or done":
+    "Исполнитель может установить только статус «В работе» или «Выполнено»",
+  "Executor can only update task status": "Исполнитель может менять только статус задачи",
+  "Executor can only set task status to in_progress or done":
+    "Исполнитель может установить только статус «В работе» или «Выполнено»",
+  "start_time must be < end_time": "Время начала должно быть раньше времени окончания",
+  "end_time must be <= deadline": "Время окончания не должно быть позже дедлайна",
+  "Cannot invite yourself this way": "Нельзя пригласить самого себя таким способом",
+  "User already has an assignee record for this task": "Пользователь уже назначен на эту задачу",
+  "You can only accept your own invitation": "Можно принять только своё приглашение",
+  "You can only decline your own invitation": "Можно отклонить только своё приглашение",
+  "No active assignment to withdraw from": "Нет активного назначения для отказа",
+  "Assignee not found": "Исполнитель не найден",
+  "History record not found": "Запись истории не найдена",
+  "History does not belong to this task": "Запись истории не относится к этой задаче",
+  "Resource not found": "Ресурс не найден",
+  "Resource not found or access denied": "Ресурс не найден или доступ запрещён",
+  "Allocation not found": "Назначение ресурса не найдено",
+  "Resource allocation not found": "Назначение ресурса не найдено",
+  "Resource allocation not found or access denied": "Назначение ресурса не найдено или доступ запрещён",
+  "Cannot cancel completed and cancelled allocation": "Нельзя отменить завершённое или уже отменённое назначение",
+  "Not enough resource available": "Недостаточно свободного ресурса на выбранный период",
+  "Invalid time range": "Некорректный интервал времени",
+  "Task does not belong to this event": "Задача не относится к этому мероприятию",
+  "Cannot allocate to completed task": "Нельзя назначить ресурс на завершённую задачу",
+  "Allocation outside task time": "Назначение выходит за рамки времени задачи",
+  "Cannot update completed or cancelled allocation": "Нельзя изменить завершённое или отменённое назначение",
+  "User profile already exists": "Профиль пользователя уже существует",
+  "Email already in use": "Этот email уже используется",
+  "Profile data violates uniqueness constraints": "Данные профиля нарушают ограничения уникальности",
+  "User profile not found": "Профиль пользователя не найден",
+  "Email already in use in user profiles": "Этот email уже используется в профилях",
+  "User not found": "Пользователь не найден",
+  "Notification not found": "Уведомление не найдено",
+  "User profile is required. Create profile in user-service": "Требуется профиль пользователя. Создайте профиль в системе",
+  "event-service unavailable": "Сервис мероприятий временно недоступен",
+  "task-service unavailable": "Сервис задач временно недоступен",
+  "user-service unavailable": "Сервис пользователей временно недоступен",
+  "Could not validate credentials": "Не удалось проверить учётные данные",
+  "Admin access required": "Требуются права администратора",
+  "Service access required": "Требуется служебный доступ",
+  "Invalid role": "Недопустимая роль"
+};
+
+const API_ERROR_FALLBACK_RU =
+  "Не удалось выполнить операцию. Попробуйте ещё раз или обратитесь к администратору.";
+
+function extractApiErrorDetail(body) {
+  if (!body || typeof body !== "object") return "";
+  const detail = body.detail ?? body.message;
+  if (detail == null) return "";
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (item && typeof item === "object") return item.msg || item.message || JSON.stringify(item);
+        return String(item);
+      })
+      .filter(Boolean)
+      .join("; ");
+  }
+  return String(detail);
+}
+
+function hasCyrillic(text) {
+  return /[а-яёА-ЯЁ]/.test(text);
+}
+
+function localizeApiError(message) {
+  const raw = String(message ?? "").trim();
+  if (!raw) return API_ERROR_FALLBACK_RU;
+  if (hasCyrillic(raw)) return raw;
+  if (API_ERROR_MESSAGES_RU[raw]) return API_ERROR_MESSAGES_RU[raw];
+  const lower = raw.toLowerCase();
+  const matchedKey = Object.keys(API_ERROR_MESSAGES_RU).find((key) => key.toLowerCase() === lower);
+  if (matchedKey) return API_ERROR_MESSAGES_RU[matchedKey];
+  if (raw.startsWith("HTTP ")) return raw;
+  return API_ERROR_FALLBACK_RU;
+}
+
 async function apiRequest(url, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (state.token) {
@@ -270,19 +383,21 @@ async function apiRequest(url, options = {}) {
     let message = `HTTP ${response.status}`;
     try {
       const body = await response.json();
-      message = body.detail || body.message || message;
+      const extracted = extractApiErrorDetail(body);
+      if (extracted) message = extracted;
     } catch (err) {
       // ignore body parse error
     }
+    const localized = localizeApiError(message);
     if (
       response.status === 401 ||
-      (response.status === 403 && typeof message === "string" && message.toLowerCase().includes("credentials"))
+      (response.status === 403 && localized.toLowerCase().includes("учётн"))
     ) {
       clearSession();
       syncAuthUi();
       throw new Error("Сессия истекла или токен недействителен. Выполните вход снова");
     }
-    throw new Error(message);
+    throw new Error(localized);
   }
   if (response.status === 204) return null;
   return response.json();
@@ -1245,10 +1360,10 @@ function renderUsers() {
   const canManageParticipants = canCreate();
   const controls = document.getElementById("users-add-controls");
   if (controls) controls.classList.toggle("hidden", !canManageParticipants);
-  el.usersModeHint.classList.toggle("hidden", !inParticipantMode);
-  el.usersModeHint.textContent = inParticipantMode
-    ? `Предзаполнено мероприятие #${state.participantsModeEventId}. При необходимости можно выбрать другое.`
-    : "Список пользователей";
+  el.usersModeHint.classList.toggle("hidden", inParticipantMode);
+  if (!inParticipantMode) {
+    el.usersModeHint.textContent = "Список пользователей";
+  }
   if (el.usersAddEventSelect) {
     el.usersAddEventSelect.disabled = false;
   }
