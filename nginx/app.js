@@ -375,6 +375,132 @@ function renderTaskInlineBadges(task) {
     ${lateStartBadge}`;
 }
 
+function computeTaskStatusStats(tasks) {
+  const list = Array.isArray(tasks) ? tasks : [];
+  const total = list.length;
+  let done = 0;
+  for (const t of list) {
+    if (String(t.status || "").toLowerCase() === "done") done += 1;
+  }
+  return {
+    total,
+    done,
+    percentDone: total ? Math.round((done / total) * 100) : 0,
+  };
+}
+
+function progressStatRow(label, count, total, percent, fillClass = "") {
+  const width = Math.min(100, Math.max(0, percent));
+  const fillCls = fillClass ? ` progress-bar-fill ${fillClass}` : " progress-bar-fill";
+  return `<div class="progress-stat-row">
+    <span class="progress-stat-label">${escapeHtml(label)}</span>
+    <div class="progress-bar"><div class="${fillCls.trim()}" style="width:${width}%"></div></div>
+    <span class="progress-stat-value">${count} / ${total} (${percent}%)</span>
+  </div>`;
+}
+
+function buildTaskProgressStatsHtml(stats) {
+  if (!stats.total) {
+    return '<p class="list-item-meta">Нет задач для статистики.</p>';
+  }
+  return progressStatRow(
+    "Выполнено",
+    stats.done,
+    stats.total,
+    stats.percentDone,
+    "progress-bar-fill-done"
+  );
+}
+
+function peakConcurrentQuantity(allocations) {
+  const events = [];
+  for (const a of allocations) {
+    const qty = Number(a.quantity_used) || 0;
+    if (qty <= 0) continue;
+    const start = new Date(a.date_start).getTime();
+    const end = new Date(a.date_end).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    events.push({ t: start, delta: qty });
+    events.push({ t: end, delta: -qty });
+  }
+  if (!events.length) return 0;
+  events.sort((a, b) => {
+    if (a.t !== b.t) return a.t - b.t;
+    return a.delta - b.delta;
+  });
+  let current = 0;
+  let peak = 0;
+  for (const e of events) {
+    current += e.delta;
+    if (current > peak) peak = current;
+  }
+  return peak;
+}
+
+function computeResourceUtilization(eventResources, _event) {
+  const rows = [];
+  for (const r of eventResources || []) {
+    const quantity = Number(r.quantity) || 0;
+    if (quantity <= 0) continue;
+    const allocations = (r.allocations || []).filter(
+      (a) => String(a.status || "").toLowerCase() !== "cancelled"
+    );
+    const peakUsed = peakConcurrentQuantity(allocations);
+    const rawPercent = Math.round((peakUsed / quantity) * 100);
+    const loadPercent = Math.min(100, rawPercent);
+    rows.push({
+      id: r.id,
+      name: r.name,
+      quantity,
+      peakUsed,
+      loadPercent,
+      rawPercent,
+      allocationCount: allocations.length,
+    });
+  }
+  rows.sort((a, b) => b.rawPercent - a.rawPercent || a.name.localeCompare(b.name));
+  return rows;
+}
+
+function buildResourceUtilizationHtml(rows, eventResources) {
+  const resources = eventResources || [];
+  if (!resources.length) {
+    return '<p class="list-item-meta">Ресурсы не добавлены.</p>';
+  }
+  if (!rows.length) {
+    return '<p class="list-item-meta">Нет ресурсов с указанной ёмкостью для расчёта загрузки.</p>';
+  }
+  let totalAlloc = 0;
+  for (const r of resources) {
+    for (const a of r.allocations || []) {
+      if (String(a.status || "").toLowerCase() !== "cancelled") totalAlloc += 1;
+    }
+  }
+  const avgLoad =
+    rows.length > 0
+      ? Math.round(rows.reduce((s, r) => s + r.rawPercent, 0) / rows.length)
+      : 0;
+  const summary = `<p class="progress-stat-summary">${resources.length} ресурсов, ${totalAlloc} назначений · средняя пиковая загрузка ${avgLoad}%</p>`;
+  const bars = rows
+    .map((row) => {
+      const overCapacity = row.peakUsed > row.quantity;
+      const fillClass = overCapacity
+        ? "progress-bar-fill progress-bar-fill-warn"
+        : row.loadPercent >= 80
+          ? "progress-bar-fill progress-bar-fill-warn"
+          : "progress-bar-fill";
+      const width = Math.min(100, Math.max(0, row.loadPercent));
+      const pctLabel = overCapacity ? `${row.rawPercent}%` : `${row.loadPercent}%`;
+      return `<div class="progress-stat-row">
+        <span class="progress-stat-label" title="${escapeHtml(row.name)}">${escapeHtml(row.name)}</span>
+        <div class="progress-bar"><div class="${fillClass}" style="width:${width}%"></div></div>
+        <span class="progress-stat-value">${row.peakUsed} / ${row.quantity} (${pctLabel})</span>
+      </div>`;
+    })
+    .join("");
+  return summary + bars;
+}
+
 function setFormError(form, message = "") {
   if (!form) return;
   let node = form.querySelector(".form-error");
@@ -1361,7 +1487,7 @@ async function refreshData() {
     state.profileId = null;
     if (String(error.message).includes("User profile not found")) {
       setProfileRequired(true);
-      notify("Создайте профиль в user-service для доступа к функциям", true);
+      notify("Создайте профиль для доступа к функциям", true);
       return;
     }
   }
@@ -1984,6 +2110,12 @@ function renderEventDetailCard(
   const eventDepsEditorBlock =
     canManage && tasks.length > 0 ? buildEventDependenciesEditor(tasks, depMap, event.id) : "";
 
+  const taskStatsHtml = buildTaskProgressStatsHtml(computeTaskStatusStats(tasks));
+  const resourceUtilHtml = buildResourceUtilizationHtml(
+    computeResourceUtilization(eventResources, event),
+    eventResources
+  );
+
   root.innerHTML = `
     <div class="panel">
       <dl class="detail-dl">
@@ -2026,6 +2158,14 @@ function renderEventDetailCard(
       <h3>Назначения ресурсов на мероприятие</h3>
       <p class="list-item-meta">Назначения без привязки к задаче (уровень мероприятия).</p>
       ${eventLevelAllocationsBlock}
+    </div>
+    <div class="panel">
+      <h3>Статистика выполнения задач</h3>
+      ${taskStatsHtml}
+    </div>
+    <div class="panel">
+      <h3>Загрузка ресурсов</h3>
+      ${resourceUtilHtml}
     </div>
   `;
 
