@@ -74,9 +74,6 @@ def get_current_admin(token_data: TokenData=Depends(get_current_user_data)):
     return token_data
 
 
-
-
-
 def get_current_service(token_data: TokenData = Depends(get_current_user_data)):
     if token_data.role != "service":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Service access required")
