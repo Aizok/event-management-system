@@ -1937,7 +1937,15 @@ function buildEventDependenciesEditor(tasks, _depMap, eventId) {
         </label>
         <button type="button" class="btn btn-primary" id="event-dep-add-btn">Добавить зависимость</button>
       </div>
+      <p id="event-dep-error" class="form-error hidden"></p>
     </div>`;
+}
+
+function setEventDepError(message = "") {
+  const node = document.getElementById("event-dep-error");
+  if (!node) return;
+  node.textContent = message;
+  node.classList.toggle("hidden", !message);
 }
 
 function syncEventDepPredecessorOptions(tasks, depMap) {
@@ -2319,6 +2327,7 @@ function renderEventDetailCard(
       const succSel = document.getElementById("event-dep-successor-select");
       succSel?.addEventListener("change", () => syncEventDepPredecessorOptions(tasks, depMap));
       syncEventDepPredecessorOptions(tasks, depMap);
+      setEventDepError("");
       document.getElementById("event-dep-add-btn")?.addEventListener("click", () => void onEventDepAdd(event.id));
     }
   }
@@ -2936,14 +2945,15 @@ async function onTaskDependencyRemove(taskId, dependsOnTaskId) {
 async function onEventDepAdd(eventId) {
   const succ = document.getElementById("event-dep-successor-select");
   const pred = document.getElementById("event-dep-predecessor-select");
+  setEventDepError("");
   if (!succ?.value || !pred?.value) {
-    notify("Выберите задачу и предшественника", true);
+    setEventDepError("Выберите задачу и предшественника");
     return;
   }
   const taskId = Number(succ.value);
   const dependsOn = Number(pred.value);
   if (taskId === dependsOn) {
-    notify("Задача не может зависеть от самой себя", true);
+    setEventDepError("Задача не может зависеть от самой себя");
     return;
   }
   try {
@@ -2951,7 +2961,7 @@ async function onEventDepAdd(eventId) {
     notify("Зависимость добавлена");
     await openEventDetail(eventId);
   } catch (error) {
-    notify(`Не удалось добавить зависимость: ${error.message}`, true);
+    setEventDepError(error.message);
   }
 }
 
