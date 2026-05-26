@@ -10,6 +10,7 @@ from ....core.security import (
     create_access_token,
     get_current_service,
     get_current_user_id,
+    get_current_user_data,
     get_password_hash,
 )
 from ....core.config import settings
@@ -22,6 +23,7 @@ from ....schemas.user import (
     Token,
     UserUpdate,
     TokenData,
+    TokenRole,
     UserSelfUpdate,
     UserSelfUpdateResponse,
 )
@@ -33,6 +35,10 @@ router=APIRouter()
 class ServiceTokenRequest(BaseModel):
     service_name: str
     service_secret: str
+
+
+class UserRoleUpdateRequest(BaseModel):
+    role: str
 
 
 @router.post("/internal/token")
@@ -241,3 +247,32 @@ async def get_user(user_id: int, db: AsyncSession=Depends(get_db)):
             detail=f"Пользователь с ID {user_id} не найден"
         )
     return user
+
+
+@router.patch("/users/{user_id}/role", response_model=UserResponse)
+async def update_user_role(
+    user_id: int,
+    body: UserRoleUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    token_data: TokenData = Depends(get_current_user_data),
+):
+    if token_data.role != TokenRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions",
+        )
+    try:
+        new_role = UserRole(body.role)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid role",
+        )
+
+    updated = await auth_crud.update(db, user_id, UserUpdate(role=new_role))
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    return updated

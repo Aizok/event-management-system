@@ -3030,6 +3030,41 @@ async function openResourceDetail(resourceId) {
   }
 }
 
+function buildSystemRoleOptions(currentRole) {
+  const roles = ["admin", "organizer", "executor", "viewer"];
+  return roles
+    .map(
+      (role) =>
+        `<option value="${role}" ${String(currentRole || "").toLowerCase() === role ? "selected" : ""}>${enumLabel("participantRole", role)}</option>`
+    )
+    .join("");
+}
+
+async function onUserRoleChange(authUserId, profileId) {
+  const roleSelect = document.getElementById("user-role-edit-select");
+  if (!roleSelect?.value) {
+    notify("Выберите роль", true);
+    return;
+  }
+  const authId = Number(authUserId);
+  if (!Number.isFinite(authId) || authId <= 0) {
+    notify("Не удалось определить учётную запись пользователя", true);
+    return;
+  }
+  const nextRole = roleSelect.value;
+  try {
+    await apiRequest(`${API.auth}/users/${authId}/role`, {
+      method: "PATCH",
+      body: JSON.stringify({ role: nextRole })
+    });
+    notify("Роль обновлена");
+    await refreshData();
+    await openUserDetail(profileId);
+  } catch (error) {
+    notify(`Ошибка смены роли: ${error.message}`, true);
+  }
+}
+
 async function openUserDetail(userId) {
   state.detailBackTarget = null;
   state.detailView = "user";
@@ -3054,10 +3089,29 @@ async function openUserDetail(userId) {
     el.screenTitle.textContent = `${user.first_name || ""} ${user.last_name || ""}`.trim() || `Пользователь #${userId}`;
     const showContacts =
       state.role === "admin" || (state.profileId != null && Number(userId) === Number(state.profileId));
+    const canChangeSystemRole =
+      state.role === "admin" &&
+      state.profileId != null &&
+      Number(userId) !== Number(state.profileId) &&
+      user.auth_user_id != null;
+    const roleManagePanel = canChangeSystemRole
+      ? `
+      <div class="panel">
+        <h3>Системная роль</h3>
+        <p class="list-item-meta">Изменение системной роли пользователя (auth-service).</p>
+        <div class="detail-actions">
+          <select id="user-role-edit-select">
+            ${buildSystemRoleOptions(user.role)}
+          </select>
+          <button type="button" class="btn btn-primary btn-inline" id="user-role-save-btn">Сохранить роль</button>
+        </div>
+      </div>`
+      : "";
     root.innerHTML = `
       <div class="panel">
         <dl class="detail-dl">
-          <dt>ID</dt><dd>${user.id}</dd>
+          <dt>ID профиля</dt><dd>${user.id}</dd>
+          ${showContacts && user.auth_user_id != null ? `<dt>ID учётной записи</dt><dd>${user.auth_user_id}</dd>` : ""}
           <dt>Имя</dt><dd>${escapeHtml(user.first_name || "—")}</dd>
           <dt>Фамилия</dt><dd>${escapeHtml(user.last_name || "—")}</dd>
           <dt>Специализация</dt><dd>${escapeHtml(user.speciality || "—")}</dd>
@@ -3069,7 +3123,13 @@ async function openUserDetail(userId) {
           }
         </dl>
       </div>
+      ${roleManagePanel}
     `;
+    if (canChangeSystemRole) {
+      document.getElementById("user-role-save-btn")?.addEventListener("click", () =>
+        void onUserRoleChange(user.auth_user_id, user.id)
+      );
+    }
     notify("Готово");
   } catch (error) {
     notify(error.message, true);
