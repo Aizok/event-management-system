@@ -120,6 +120,20 @@ async def get_user_internal(
     }
 
 
+@router.delete("/internal/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user_internal(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    service: TokenData = Depends(get_current_service),
+):
+    deleted = await auth_crud.delete(db, user_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with id={user_id} not found",
+        )
+
+
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_in: UserCreate, db: AsyncSession=Depends(get_db)):
     existing_user=await auth_crud.get_by_email(db, user_in.email)

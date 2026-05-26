@@ -318,6 +318,8 @@ const API_ERROR_MESSAGES_RU = {
   "User profile not found": "Профиль пользователя не найден",
   "Email already in use in user profiles": "Этот email уже используется в профилях",
   "User not found": "Пользователь не найден",
+  "Cannot delete your own account": "Нельзя удалить свою учётную запись",
+  "Failed to delete auth account": "Не удалось удалить учётную запись",
   "Notification not found": "Уведомление не найдено",
   "User profile is required. Create profile in user-service": "Требуется профиль пользователя. Создайте профиль в системе",
   "event-service unavailable": "Сервис мероприятий временно недоступен",
@@ -3040,6 +3042,28 @@ function buildSystemRoleOptions(currentRole) {
     .join("");
 }
 
+async function onUserProfileDelete(profileId) {
+  if (
+    !confirm(
+      "Удалить пользователя безвозвратно? Будут удалены профиль и учётная запись (вход по email станет невозможен)."
+    )
+  ) {
+    return;
+  }
+  try {
+    await apiRequest(`${API.users}/${profileId}`, { method: "DELETE" });
+    notify("Пользователь удалён");
+    state.detailView = null;
+    hideAllScreens();
+    document.getElementById(`${state.currentScreen}-screen`).classList.remove("hidden");
+    el.screenTitle.textContent = screenName(state.currentScreen);
+    updateTopbarActions();
+    await refreshData();
+  } catch (error) {
+    notify(`Ошибка удаления: ${error.message}`, true);
+  }
+}
+
 async function onUserRoleChange(authUserId, profileId) {
   const roleSelect = document.getElementById("user-role-edit-select");
   if (!roleSelect?.value) {
@@ -3094,17 +3118,29 @@ async function openUserDetail(userId) {
       state.profileId != null &&
       Number(userId) !== Number(state.profileId) &&
       user.auth_user_id != null;
+    const canDeleteUser =
+      state.role === "admin" &&
+      state.profileId != null &&
+      Number(userId) !== Number(state.profileId);
     const roleManagePanel = canChangeSystemRole
       ? `
       <div class="panel">
         <h3>Системная роль</h3>
-        <p class="list-item-meta">Изменение системной роли пользователя (auth-service).</p>
+        <p class="list-item-meta">Изменение системной роли пользователя</p>
         <div class="detail-actions">
           <select id="user-role-edit-select">
             ${buildSystemRoleOptions(user.role)}
           </select>
           <button type="button" class="btn btn-primary btn-inline" id="user-role-save-btn">Сохранить роль</button>
         </div>
+      </div>`
+      : "";
+    const deleteUserPanel = canDeleteUser
+      ? `
+      <div class="panel">
+        <h3>Опасная зона</h3>
+        <p class="list-item-meta">Удаляются профиль и учётная запись. Действие необратимо.</p>
+        <button type="button" class="btn btn-danger" id="user-profile-delete-btn">Удалить пользователя</button>
       </div>`
       : "";
     root.innerHTML = `
@@ -3124,10 +3160,16 @@ async function openUserDetail(userId) {
         </dl>
       </div>
       ${roleManagePanel}
+      ${deleteUserPanel}
     `;
     if (canChangeSystemRole) {
       document.getElementById("user-role-save-btn")?.addEventListener("click", () =>
         void onUserRoleChange(user.auth_user_id, user.id)
+      );
+    }
+    if (canDeleteUser) {
+      document.getElementById("user-profile-delete-btn")?.addEventListener("click", () =>
+        void onUserProfileDelete(user.id)
       );
     }
     notify("Готово");

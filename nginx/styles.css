@@ -317,10 +317,14 @@ textarea {
   align-items: center;
 }
 
-.detail-actions .btn-danger {
+.btn.btn-danger {
   border-color: #c44;
   background: #c44;
   color: #fff;
+}
+
+.btn.btn-danger:hover {
+  filter: brightness(0.95);
 }
 
 .entity-link {

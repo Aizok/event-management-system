@@ -77,6 +77,32 @@ async def get_auth_user_ids_by_role(role: str) -> list[int]:
             return []
 
 
+async def delete_auth_user(auth_user_id: int) -> None:
+    try:
+        token = await get_service_token()
+    except Exception as e:
+        logger.error(f"Failed to get service token for auth user delete: {e}")
+        raise
+
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.delete(
+                f"http://nginx/api/auth/internal/users/{auth_user_id}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if resp.status_code == status.HTTP_404_NOT_FOUND:
+                logger.error(f"auth user {auth_user_id} not found for delete")
+                raise Exception("Auth user not found")
+            if resp.status_code != status.HTTP_204_NO_CONTENT:
+                logger.error(
+                    f"auth-service delete error: {resp.status_code}, body: {resp.text}"
+                )
+                raise Exception("Failed to delete auth user")
+        except Exception as e:
+            logger.error(f"Error deleting auth user {auth_user_id}: {e}")
+            raise
+
+
 async def get_user_role_from_auth(auth_user_id: int) -> str | None:
     try:
         token = await get_service_token()

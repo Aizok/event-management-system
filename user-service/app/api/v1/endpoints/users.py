@@ -22,6 +22,7 @@ from ....core.auth_client import (
     get_user_email_from_auth,
     get_user_role_from_auth,
     get_auth_user_ids_by_role,
+    delete_auth_user,
 )
 
 from fastapi.security import OAuth2PasswordBearer
@@ -416,8 +417,26 @@ async def delete_user_profile(
     if not profile:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    if profile.auth_user_id != token_data.user_id and token_data.role != "admin":
+    is_owner = profile.auth_user_id == token_data.user_id
+    is_admin = token_data.role == TokenRole.ADMIN
+
+    if not is_owner and not is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+
+    if is_owner and is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot delete your own account",
+        )
+
+    if is_admin:
+        try:
+            await delete_auth_user(profile.auth_user_id)
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to delete auth account",
+            )
 
     success = await user_crud.delete(db, user_id)
 
