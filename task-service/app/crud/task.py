@@ -211,6 +211,7 @@ class TaskCRUD:
             if status_value not in {"in_progress", "done"}:
                 raise ValueError("Executors can only set status to in_progress or done")
 
+        status_changed = "status" in update_data
         new_status = update_data.get("status", db_obj.status)
 
         if "status" in update_data and new_status in [TaskStatus.IN_PROGRESS, TaskStatus.DONE]:
@@ -254,6 +255,10 @@ class TaskCRUD:
 
         await db.flush()
         await self.sync_blocked_status(db, db_obj)
+
+        if status_changed:
+            # При изменении статуса пересчитываем статусы потомков по графу зависимостей.
+            await self.sync_blocked_status_for_descendants(db, db_obj.id)
 
         if "start_time" in update_data or "end_time" in update_data:
             await self.recalculate_schedule(db, db_obj.id)
@@ -381,6 +386,32 @@ class TaskCRUD:
             # Разблокировать, если была blocked
             if task.status == TaskStatus.BLOCKED:
                 task.status=TaskStatus.TODO
+
+    async def sync_blocked_status_for_descendants(self, db: AsyncSession, task_id: int):
+        """
+        Синхронизируем статусы потомков относительно графа зависимостей.
+
+        В частности, при смене статуса предшественника на DONE нужно
+        перебрать дочерние задачи и автоматически разблокировать их.
+        """
+        visited = {task_id}
+        to_visit = [task_id]
+
+        while to_visit:
+            current_id = to_visit.pop()
+            child_ids = await task_dependency_crud.get_child_ids(db, current_id)
+            for child_id in child_ids:
+                if child_id in visited:
+                    continue
+                visited.add(child_id)
+
+                child_task = await self.get(db, child_id)
+                if child_task:
+                    await self.sync_blocked_status(db, child_task)
+                    # Чтобы последующие проверки unfinished parents видели актуальные статусы
+                    # в рамках текущей транзакции.
+                    await db.flush()
+                to_visit.append(child_id)
 
 
     async def get_critical_tasks(self, db: AsyncSession):
