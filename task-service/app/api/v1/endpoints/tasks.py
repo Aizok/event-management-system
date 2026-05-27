@@ -16,7 +16,11 @@ from ....schemas.task import (
     TaskStatus,
     TaskPriority,
 )
-from ....core.events import publish_task_created, publish_task_updated
+from ....core.events import (
+    publish_task_created,
+    publish_task_updated,
+    publish_task_rescheduled,
+)
 from ....core.event_client import get_event_title
 from ....core.permissions import (
     check_task_permissions,
@@ -325,6 +329,11 @@ async def update_task(
     changes = task_in.model_dump(exclude_unset=True)
     changes["previous_status"] = previous_status
     changes["updated_by"] = user_id
+
+    time_changed = "start_time" in changes or "end_time" in changes
+
+    if time_changed:
+        await publish_task_rescheduled(db, task.id)
 
     """Отправка события TaskUpdated"""
     await publish_task_updated(db, task.id, changes)

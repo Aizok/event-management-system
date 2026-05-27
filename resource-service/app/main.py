@@ -8,6 +8,11 @@ from .crud.resource import resource_crud
 from .core.events import start_resource_consumer, consumer
 import logging
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+
 logger=logging.getLogger(__name__)
 
 async def allocation_status_worker():

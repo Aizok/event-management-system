@@ -75,6 +75,12 @@ class EventConsumer:
                     event=BaseEvent.model_validate(event_data)
 
                     print(f"Получено событие {event.event_type.value} (id={event.event_id})")
+                    if event.event_type.value == "TaskRescheduled":
+                        print(
+                            f"  TaskRescheduled payload: source_entity_id={event.source_entity_id}, "
+                            f"data={event.data}",
+                            flush=True,
+                        )
                     if callback:
                         await callback(event)
 
