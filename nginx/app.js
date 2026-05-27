@@ -2062,6 +2062,7 @@ function buildAllocationItemHtml(alloc, options = {}) {
     returnEventId = null
   } = options;
   const editable = canManage && canEditAllocation(alloc);
+  const deletable = canManage;
   const statusBadge = `<span class="badge">${enumLabel("allocationStatus", alloc.status)}</span>`;
 
   let titleHtml = `<p class="list-item-title">${statusBadge}</p>`;
@@ -2095,15 +2096,18 @@ function buildAllocationItemHtml(alloc, options = {}) {
     metaHtml = `<p class="list-item-meta">Задача: ${taskHtml} | Количество: ${alloc.quantity_used} | ${formatDateTime(alloc.date_start)} — ${formatDateTime(alloc.date_end)}</p>`;
   }
 
-  const actions = editable
+  const actions = deletable
     ? `
     <div class="detail-actions" style="margin-top:8px">
-      <button type="button" class="btn btn-muted btn-inline" data-allocation-edit-toggle="${alloc.id}">Редактировать</button>
+      ${editable ? `<button type="button" class="btn btn-muted btn-inline" data-allocation-edit-toggle="${alloc.id}">Редактировать</button>` : ""}
       <button type="button" class="btn btn-danger btn-inline" data-allocation-delete="${alloc.id}">Удалить</button>
-    </div>`
-    : canManage && !canEditAllocation(alloc)
-      ? '<p class="list-item-meta">Редактирование недоступно для завершённых и отменённых назначений.</p>'
-      : "";
+    </div>
+    ${
+      !editable && canManage
+        ? '<p class="list-item-meta">Изменить параметры можно только для запланированных и активных назначений.</p>'
+        : ""
+    }`
+    : "";
 
   const editForm = editable
     ? `
