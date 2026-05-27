@@ -2037,6 +2037,178 @@ function collectEventLevelAllocations(eventResources) {
   return out;
 }
 
+function canEditAllocation(alloc) {
+  const status = String(alloc?.status || "").toLowerCase();
+  return status !== "completed" && status !== "cancelled";
+}
+
+function buildAllocationTaskSelectOptions(tasks, selectedTaskId) {
+  const opts = ['<option value="">Без задачи</option>'];
+  for (const t of tasks || []) {
+    const selected = selectedTaskId != null && Number(selectedTaskId) === Number(t.id) ? "selected" : "";
+    const label = (t.title && String(t.title).trim()) || `Задача #${t.id}`;
+    opts.push(`<option value="${t.id}" ${selected}>${escapeHtml(label)}</option>`);
+  }
+  return opts.join("");
+}
+
+function buildAllocationItemHtml(alloc, options = {}) {
+  const {
+    canManage = false,
+    eventId = null,
+    tasks = [],
+    taskById = {},
+    resource = null,
+    returnEventId = null
+  } = options;
+  const editable = canManage && canEditAllocation(alloc);
+  const statusBadge = `<span class="badge">${enumLabel("allocationStatus", alloc.status)}</span>`;
+
+  let titleHtml = `<p class="list-item-title">${statusBadge}</p>`;
+  if (resource) {
+    titleHtml = `
+      <p class="list-item-title">
+        <button type="button" class="entity-link" data-entity-link="resource" data-id="${resource.id}">
+          ${escapeHtml(resource.name)}
+        </button>
+        <span class="badge">${enumLabel("resourceType", resource.type)}</span>
+        ${statusBadge}
+      </p>`;
+  }
+
+  let metaHtml;
+  if (resource) {
+    metaHtml = `<p class="list-item-meta">Количество: ${alloc.quantity_used} | ${formatDateTime(alloc.date_start)} — ${formatDateTime(alloc.date_end)}</p>`;
+  } else {
+    const tid = alloc.task_id;
+    let taskHtml = "—";
+    if (tid != null && tid !== "") {
+      const titleFromMap = taskById[tid] || "";
+      const retAttr =
+        returnEventId != null
+          ? ` data-return-event="${returnEventId}"`
+          : eventId != null
+            ? ` data-return-event="${eventId}"`
+            : "";
+      taskHtml = `<button type="button" class="entity-link" data-entity-link="task" data-id="${tid}"${retAttr}>${escapeHtml(titleFromMap || "Без названия")}</button>`;
+    }
+    metaHtml = `<p class="list-item-meta">Задача: ${taskHtml} | Количество: ${alloc.quantity_used} | ${formatDateTime(alloc.date_start)} — ${formatDateTime(alloc.date_end)}</p>`;
+  }
+
+  const actions = editable
+    ? `
+    <div class="detail-actions" style="margin-top:8px">
+      <button type="button" class="btn btn-muted btn-inline" data-allocation-edit-toggle="${alloc.id}">Редактировать</button>
+      <button type="button" class="btn btn-danger btn-inline" data-allocation-delete="${alloc.id}">Удалить</button>
+    </div>`
+    : canManage && !canEditAllocation(alloc)
+      ? '<p class="list-item-meta">Редактирование недоступно для завершённых и отменённых назначений.</p>'
+      : "";
+
+  const editForm = editable
+    ? `
+    <div id="allocation-edit-${alloc.id}" class="hidden" style="margin-top:10px">
+      <form class="grid-form allocation-edit-form" data-allocation-id="${alloc.id}">
+        <label>Задача
+          <select name="task_id">${buildAllocationTaskSelectOptions(tasks, alloc.task_id)}</select>
+        </label>
+        <label>Количество<input name="quantity_used" type="number" min="1" value="${alloc.quantity_used}" required></label>
+        <label>Начало<input name="date_start" type="datetime-local" required value="${toDatetimeLocalValue(alloc.date_start)}"></label>
+        <label>Окончание<input name="date_end" type="datetime-local" required value="${toDatetimeLocalValue(alloc.date_end)}"></label>
+        <div class="detail-actions">
+          <button class="btn btn-primary btn-inline" type="submit">Сохранить</button>
+          <button type="button" class="btn btn-muted btn-inline" data-allocation-edit-cancel="${alloc.id}">Отмена</button>
+        </div>
+      </form>
+    </div>`
+    : "";
+
+  return `
+    <article class="list-item" data-allocation-item="${alloc.id}">
+      ${titleHtml}
+      ${metaHtml}
+      ${actions}
+      ${editForm}
+    </article>`;
+}
+
+function wireAllocationListActions(container, context) {
+  if (!container || !context?.canManage) return;
+
+  container.querySelectorAll("[data-allocation-edit-toggle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.allocationEditToggle;
+      container.querySelectorAll('[id^="allocation-edit-"]').forEach((el) => el.classList.add("hidden"));
+      document.getElementById(`allocation-edit-${id}`)?.classList.remove("hidden");
+    });
+  });
+
+  container.querySelectorAll("[data-allocation-delete]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      void onAllocationDelete(Number(btn.dataset.allocationDelete), context.onRefresh);
+    });
+  });
+
+  container.querySelectorAll(".allocation-edit-form").forEach((form) => {
+    form.addEventListener("submit", (e) => {
+      void onAllocationEditSubmit(e, Number(form.dataset.allocationId), context.onRefresh);
+    });
+  });
+
+  container.querySelectorAll("[data-allocation-edit-cancel]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.getElementById(`allocation-edit-${btn.dataset.allocationEditCancel}`)?.classList.add("hidden");
+    });
+  });
+}
+
+async function onAllocationDelete(allocationId, onRefresh) {
+  if (!confirm("Удалить назначение ресурса?")) return;
+  try {
+    await apiRequest(`${API.resources}allocations/${allocationId}`, { method: "DELETE" });
+    notify("Назначение удалено");
+    if (typeof onRefresh === "function") {
+      await onRefresh();
+    } else {
+      await refreshData();
+    }
+  } catch (error) {
+    notify(`Ошибка удаления: ${error.message}`, true);
+  }
+}
+
+async function onAllocationEditSubmit(event, allocationId, onRefresh) {
+  event.preventDefault();
+  const form = event.target;
+  setFormError(form, "");
+  const payload = serializeForm(form);
+  payload.task_id = payload.task_id ? Number(payload.task_id) : null;
+  payload.quantity_used = Number(payload.quantity_used);
+  payload.date_start = toIsoOrNull(payload.date_start);
+  payload.date_end = toIsoOrNull(payload.date_end);
+
+  if (!payload.quantity_used || !payload.date_start || !payload.date_end) {
+    setFormError(form, "Заполните все поля назначения");
+    return;
+  }
+
+  try {
+    await apiRequest(`${API.resources}allocations/${allocationId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+    notify("Назначение обновлено");
+    if (typeof onRefresh === "function") {
+      await onRefresh();
+    } else {
+      await refreshData();
+    }
+  } catch (error) {
+    setFormError(form, `Ошибка сохранения: ${error.message}`);
+    notify(`Ошибка сохранения: ${error.message}`, true);
+  }
+}
+
 function renderEventDetailCard(
   event,
   tasks,
@@ -2101,22 +2273,23 @@ function renderEventDetailCard(
           .join("");
   const timelineBlock = buildEventTimeline(tasks, event);
   const eventLevelAllocRows = collectEventLevelAllocations(eventResources);
+  const eventAllocContext = {
+    canManage,
+    eventId: event.id,
+    tasks,
+    taskById: Object.fromEntries(tasks.map((t) => [t.id, (t.title && String(t.title).trim()) || ""])),
+    returnEventId: event.id,
+    onRefresh: async () => {
+      await refreshData();
+      await openEventDetail(event.id);
+    }
+  };
   const eventLevelAllocationsBlock =
     eventLevelAllocRows.length === 0
       ? '<p class="list-item-meta">Нет назначений уровня мероприятия (без привязки к задаче).</p>'
       : eventLevelAllocRows
-          .map(
-            ({ alloc: a, resource: r }) => `
-        <article class="list-item">
-          <p class="list-item-title">
-            <button type="button" class="entity-link" data-entity-link="resource" data-id="${r.id}">
-              ${escapeHtml(r.name)}
-            </button>
-            <span class="badge">${enumLabel("resourceType", r.type)}</span>
-            <span class="badge">${enumLabel("allocationStatus", a.status)}</span>
-          </p>
-          <p class="list-item-meta">Количество: ${a.quantity_used} | ${formatDateTime(a.date_start)} — ${formatDateTime(a.date_end)}</p>
-        </article>`
+          .map(({ alloc: a, resource: r }) =>
+            buildAllocationItemHtml(a, { ...eventAllocContext, resource: r })
           )
           .join("");
   const participantsBlock =
@@ -2279,7 +2452,7 @@ function renderEventDetailCard(
       <h3>Используемые ресурсы</h3>
       ${resourcesBlock}
     </div>
-    <div class="panel">
+    <div class="panel" id="event-allocations-panel">
       <h3>Назначения ресурсов на мероприятие</h3>
       <p class="list-item-meta">Назначения без привязки к задаче (уровень мероприятия).</p>
       ${eventLevelAllocationsBlock}
@@ -2332,6 +2505,7 @@ function renderEventDetailCard(
       setEventDepError("");
       document.getElementById("event-dep-add-btn")?.addEventListener("click", () => void onEventDepAdd(event.id));
     }
+    wireAllocationListActions(document.getElementById("event-allocations-panel"), eventAllocContext);
   }
   if (canDeleteEvent) {
     document.getElementById("event-delete-btn").addEventListener("click", () => onEventDelete(event.id));
@@ -2733,25 +2907,28 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
     </div>`;
 
   const taskAllocRows = Array.isArray(meta.taskAllocations) ? meta.taskAllocations : [];
+  const taskAllocContext = {
+    canManage: mode === "full" && canManage,
+    eventId: task.event_id,
+    tasks: eventTasksForDeps,
+    taskById: Object.fromEntries(
+      (eventTasksForDeps || []).map((t) => [t.id, (t.title && String(t.title).trim()) || ""])
+    ),
+    returnEventId: task.event_id,
+    onRefresh: async () => {
+      await refreshData();
+      await openTaskDetail(task.id);
+    }
+  };
   const taskResourceAllocSection = `
-    <div class="panel">
+    <div class="panel" id="task-allocations-panel">
       <h3>Назначения ресурсов на задачу</h3>
       ${
         taskAllocRows.length === 0
           ? '<p class="list-item-meta">Нет назначений ресурсов, привязанных к этой задаче.</p>'
           : taskAllocRows
-              .map(
-                ({ alloc: a, resource: r }) => `
-        <article class="list-item">
-          <p class="list-item-title">
-            <button type="button" class="entity-link" data-entity-link="resource" data-id="${r.id}">
-              ${escapeHtml(r.name)}
-            </button>
-            <span class="badge">${enumLabel("resourceType", r.type)}</span>
-            <span class="badge">${enumLabel("allocationStatus", a.status)}</span>
-          </p>
-          <p class="list-item-meta">Количество: ${a.quantity_used} | ${formatDateTime(a.date_start)} — ${formatDateTime(a.date_end)}</p>
-        </article>`
+              .map(({ alloc: a, resource: r }) =>
+                buildAllocationItemHtml(a, { ...taskAllocContext, resource: r })
               )
               .join("")
       }
@@ -2807,6 +2984,7 @@ function renderTaskDetailCard(task, dependsOnIds = [], eventTasksForDeps = [], m
     if (invBtn) {
       invBtn.addEventListener("click", () => void onTaskAssigneeInvite(task.id));
     }
+    wireAllocationListActions(document.getElementById("task-allocations-panel"), taskAllocContext);
   } else if (mode === "status_only") {
     document.getElementById("task-toggle-status-btn").addEventListener("click", () => {
       document.getElementById("task-status-section").classList.remove("hidden");
@@ -3024,7 +3202,12 @@ async function openResourceDetail(resourceId) {
       taskById[t.id] = (t.title && String(t.title).trim()) || "";
     }
 
-    renderResourceDetailCard(resource, { eventTitle, ownerName, taskById });
+    renderResourceDetailCard(resource, {
+      eventTitle,
+      ownerName,
+      taskById,
+      eventTasks: Array.isArray(eventTasks) ? eventTasks : []
+    });
     notify("Готово");
   } catch (error) {
     notify(error.message, true);
@@ -3183,26 +3366,23 @@ function renderResourceDetailCard(resource, meta = {}) {
   const root = document.getElementById("resource-detail-root");
   const canManage = canCreate();
   const allocs = Array.isArray(resource.allocations) ? resource.allocations : [];
-  const { eventTitle = "Мероприятие", ownerName = "—", taskById = {} } = meta;
+  const { eventTitle = "Мероприятие", ownerName = "—", taskById = {}, eventTasks = [] } = meta;
+  const allocContext = {
+    canManage,
+    eventId: resource.event_id,
+    tasks: eventTasks,
+    taskById,
+    returnEventId: resource.event_id,
+    onRefresh: async () => {
+      await refreshData();
+      await openResourceDetail(resource.id);
+    }
+  };
 
   const allocBlock =
     allocs.length === 0
       ? '<p class="list-item-meta">Нет назначений.</p>'
-      : allocs
-          .map((a) => {
-            const tid = a.task_id;
-            const titleFromMap = tid != null ? taskById[tid] : "";
-            const taskHtml =
-              tid == null
-                ? "—"
-                : `<button type="button" class="entity-link" data-entity-link="task" data-id="${tid}" data-return-event="${resource.event_id}">${escapeHtml(titleFromMap || "Без названия")}</button>`;
-            return `
-    <article class="list-item">
-      <p class="list-item-title"><span class="badge">${enumLabel("allocationStatus", a.status)}</span></p>
-      <p class="list-item-meta">Задача: ${taskHtml} | Количество: ${a.quantity_used} | ${formatDateTime(a.date_start)} — ${formatDateTime(a.date_end)}</p>
-    </article>`;
-          })
-          .join("");
+      : allocs.map((a) => buildAllocationItemHtml(a, allocContext)).join("");
 
   const editSection = canManage
     ? `
@@ -3249,13 +3429,14 @@ function renderResourceDetailCard(resource, meta = {}) {
       <p class="list-item-meta" style="margin-top:12px">${escapeHtml(resource.description || "")}</p>
     </div>
     ${editSection}
-    <div class="panel">
+    <div class="panel" id="resource-allocations-panel">
       <h3>Назначения</h3>
       ${allocBlock}
     </div>
   `;
 
   if (canManage) {
+    wireAllocationListActions(document.getElementById("resource-allocations-panel"), allocContext);
     document.getElementById("resource-open-allocation-btn").addEventListener("click", () => {
       void openAllocationCreatePanel({ eventId: resource.event_id, resourceId: resource.id });
     });
