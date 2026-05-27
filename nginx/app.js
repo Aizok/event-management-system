@@ -69,6 +69,12 @@ const el = {
   userDetailRoot: document.getElementById("user-detail-root")
 };
 
+function clearNotify() {
+  if (!el.statusLine) return;
+  el.statusLine.textContent = "";
+  el.statusLine.style.color = "";
+}
+
 function notify(text, isError = false) {
   el.statusLine.textContent = text;
   el.statusLine.style.color = isError ? "#b33a3a" : "#6d6962";
@@ -420,6 +426,7 @@ function screenName(screenId) {
 }
 
 function hideAllScreens() {
+  clearNotify();
   document.querySelectorAll(".screen").forEach((item) => item.classList.add("hidden"));
 }
 
@@ -645,6 +652,7 @@ function setScreen(screenId) {
     el.screenTitle.textContent = "Авторизация";
     return;
   }
+  clearNotify();
   state.currentScreen = screenId;
   if (screenId !== "users") {
     state.participantsModeEventId = null;
@@ -1742,6 +1750,7 @@ async function loadUsers() {
 }
 
 async function closeDetailView() {
+  clearNotify();
   if (state.detailBackTarget?.kind === "inbox") {
     state.detailBackTarget = null;
     state.detailView = null;
