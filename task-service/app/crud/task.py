@@ -351,6 +351,7 @@ class TaskCRUD:
 
                 child.start_time+=delta
                 child.end_time+=delta
+                child.deadline += delta
 
                 await db.flush()
                 await self.sync_blocked_status(db, child)
